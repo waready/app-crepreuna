@@ -1,0 +1,19 @@
+
+> cepre-app@1.0.0 android
+> expo start --android
+
+Starting project at D:\Desarrollo\Cepreuna\cepre-app
+React Compiler enabled
+Starting Metro Bundler
+Error: spawn EPERM
+Error: spawn EPERM
+    at ChildProcess.spawn (node:internal/child_process:420:11)
+    at Object.spawn (node:child_process:753:9)
+    at spawn (D:\Desarrollo\Cepreuna\cepre-app\node_modules\cross-spawn\index.js:12:24)
+    at D:\Desarrollo\Cepreuna\cepre-app\node_modules\@expo\spawn-async\src\spawnAsync.ts:35:18
+    at new Promise (<anonymous>)
+    at spawnAsync (D:\Desarrollo\Cepreuna\cepre-app\node_modules\@expo\spawn-async\src\spawnAsync.ts:32:17)
+    at ADBServer.startAsync (D:\Desarrollo\Cepreuna\cepre-app\node_modules\expo\node_modules\@expo\cli\src\start\platforms\android\ADBServer.ts:49:59)
+    at ADBServer.runAsync (D:\Desarrollo\Cepreuna\cepre-app\node_modules\expo\node_modules\@expo\cli\src\start\platforms\android\ADBServer.ts:82:16)
+    at getAttachedDevicesAsync (D:\Desarrollo\Cepreuna\cepre-app\node_modules\expo\node_modules\@expo\cli\src\start\platforms\android\adb.ts:240:36)
+    at startAdbReverseAsync (D:\Desarrollo\Cepreuna\cepre-app\node_modules\expo\node_modules\@expo\cli\src\start\platforms\android\adbReverse.ts:25:48)
