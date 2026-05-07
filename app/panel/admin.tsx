@@ -1,6 +1,7 @@
 import { BarChart3, BookOpenCheck, ClipboardList, KeyRound, Shield, UserCog, UsersRound } from 'lucide-react-native';
 import type React from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const adminModules = [
   { title: 'Usuarios', text: 'Gestion de cuentas, accesos y estado.', icon: <UserCog color="#00365A" size={24} />, count: '1,245' },
@@ -13,7 +14,7 @@ const adminModules = [
 
 export default function AdminScreen() {
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Text style={styles.kicker}>Administracion</Text>

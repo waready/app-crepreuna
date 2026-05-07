@@ -1,8 +1,8 @@
 import axios, { AxiosError, type AxiosRequestConfig, type AxiosResponse } from 'axios';
-import CookieManager from '@react-native-cookies/cookies';
 import { router } from 'expo-router';
 import { Platform } from 'react-native';
 
+import CookieManager from '@/services/cookie-manager';
 import { markNetworkFailure, markNetworkSuccess } from '@/services/connectivity';
 
 const REMOTE_API_BASE_URL = 'https://back.waready.org.pe';
@@ -120,11 +120,14 @@ export const api = {
       throw new Error(extractLoginFailureMessage(data) ?? 'Credenciales incorrectas o sesion no valida.');
     }
     const sessionId = readSessionFromHeaders(headers) ?? readSessionFromBody(data);
-    if (!sessionId) {
+    if (sessionId) {
+      await setSessionId(sessionId);
+    } else if (Platform.OS !== 'web') {
       await clearSessionId();
       throw new Error('Login correcto, pero el backend no envio session_id para Android. Agrega session_id en el JSON o expone Set-Cookie.');
+    } else {
+      await markSessionValidated();
     }
-    await setSessionId(sessionId);
     return data;
   },
 

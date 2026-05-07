@@ -1,6 +1,7 @@
 import { BookOpenCheck, FileText, Layers3, Link as LinkIcon, UsersRound } from 'lucide-react-native';
 import type React from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const resources = [
   { title: 'Cursos', text: 'Carga academica asignada.', icon: <BookOpenCheck color="#00365A" size={24} />, count: '5' },
@@ -13,7 +14,7 @@ const resources = [
 
 export default function TeacherResourcesScreen() {
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Text style={styles.kicker}>Recursos docente</Text>

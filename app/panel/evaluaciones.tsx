@@ -1,7 +1,8 @@
-import type React from 'react';
 import { Brain, CheckCircle2, Clock, FileQuestion, Play, Trophy } from 'lucide-react-native';
+import type React from 'react';
 import { useCallback, useMemo } from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useApiResource } from '@/hooks/use-api-resource';
 import { api } from '@/services/api';
@@ -11,6 +12,7 @@ const quizzes = [
   { title: 'Simulacro Ingenierias', subject: 'Matematica y fisica', questions: 60, time: '120 min', level: 'Intermedio' },
   { title: 'Simulacro Biomedicas', subject: 'Biologia y quimica', questions: 60, time: '120 min', level: 'Avanzado' },
   { title: 'Practica Sociales', subject: 'Historia y lenguaje', questions: 40, time: '80 min', level: 'Basico' },
+
 ];
 
 const stages = ['Habilidades', 'Intereses', 'Personalidad', 'Valores', 'Resumen'];
@@ -25,7 +27,7 @@ export default function EvaluationsScreen() {
   }, [questions]);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View style={styles.headerIcon}>

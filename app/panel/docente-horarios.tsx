@@ -1,5 +1,6 @@
 import { CalendarDays, Clock, Link as LinkIcon, UsersRound } from 'lucide-react-native';
-import { SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const blocks = [
   { day: 'Lunes', time: '08:00 - 09:30', course: 'Razonamiento Matematico', group: 'Grupo A', color: '#006CAF' },
@@ -9,7 +10,7 @@ const blocks = [
 
 export default function TeacherScheduleScreen() {
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Text style={styles.kicker}>Docente</Text>

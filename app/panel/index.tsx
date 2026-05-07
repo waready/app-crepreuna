@@ -2,7 +2,8 @@ import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { Heart, ImagePlus, LogOut, MessageCircle, Send, Share2, UserRound } from 'lucide-react-native';
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ListSkeleton } from '@/components/ui/skeleton';
 import { useApiResource } from '@/hooks/use-api-resource';
@@ -209,7 +210,7 @@ export default function ForumScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
       <FlatList
         contentContainerStyle={styles.container}
         data={visiblePosts}

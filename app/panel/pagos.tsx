@@ -1,10 +1,12 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Image } from 'expo-image';
+import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { AlertCircle, Banknote, CalendarDays, Camera, CheckCircle2, CreditCard, FileUp, Hash, Images, ReceiptText, Save, ScanLine, TicketCheck, X } from 'lucide-react-native';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CardSkeleton } from '@/components/ui/skeleton';
 import { useApiResource } from '@/hooks/use-api-resource';
@@ -36,7 +38,7 @@ export default function PaymentsScreen() {
   const paymentState = useMemo(() => normalizePayments(data), [data]);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View style={styles.headerIcon}>
@@ -139,9 +141,12 @@ function RegisterSection({
   const [file, setFile] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [validating, setValidating] = useState(false);
   const [scannerVisible, setScannerVisible] = useState(false);
+  const [previewZoomed, setPreviewZoomed] = useState(false);
   const [scanMode, setScanMode] = useState<ScanMode>(paidWithPagalo ? 'pagalo' : 'voucher');
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView | null>(null);
+  const previewSizeRef = useRef({ width: 0, height: 0 });
+  const frameRectRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
   const [tokens, setTokens] = useState<string[]>([]);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -168,10 +173,12 @@ function RegisterSection({
       return;
     }
 
+    const cropped = await cropToFrame(photo, previewSizeRef.current, frameRectRef.current);
+
     setFile({
-      uri: photo.uri,
-      width: photo.width,
-      height: photo.height,
+      uri: cropped.uri,
+      width: cropped.width,
+      height: cropped.height,
       fileName: scanMode === 'pagalo' ? 'pagalo-voucher.jpg' : 'voucher-ventanilla.jpg',
       mimeType: 'image/jpeg',
     } as ImagePicker.ImagePickerAsset);
@@ -302,19 +309,19 @@ function RegisterSection({
         </View>
 
         {file ? (
-          <View style={styles.previewCard}>
-            <Image source={{ uri: file.uri }} style={styles.previewImage} contentFit="cover" />
+          <Pressable style={styles.previewCard} onPress={() => setPreviewZoomed(true)}>
+            <Image source={{ uri: file.uri }} style={styles.previewImage} contentFit="contain" />
             <View style={styles.previewOverlay}>
               <View style={styles.previewBadge}>
                 <CheckCircle2 color="#ffffff" size={16} />
-                <Text style={styles.previewBadgeText}>Imagen lista</Text>
+                <Text style={styles.previewBadgeText}>Toca para ver completa</Text>
               </View>
               <Pressable style={styles.previewReplaceButton} onPress={takeVoucherPhoto}>
                 <Camera color="#00365A" size={16} />
                 <Text style={styles.previewReplaceText}>Repetir captura</Text>
               </Pressable>
             </View>
-          </View>
+          </Pressable>
         ) : (
           <View style={styles.exampleCard}>
             <Image
@@ -339,8 +346,21 @@ function RegisterSection({
         onCapture={captureVoucher}
         onChangeMode={setScanMode}
         onClose={() => setScannerVisible(false)}
+        onPreviewLayout={(w, h) => { previewSizeRef.current = { width: w, height: h }; }}
+        onFrameLayout={(x, y, w, h) => { frameRectRef.current = { x, y, width: w, height: h }; }}
         visible={scannerVisible}
       />
+
+      <Modal animationType="fade" transparent visible={previewZoomed && !!file} onRequestClose={() => setPreviewZoomed(false)}>
+        <Pressable style={styles.zoomBackdrop} onPress={() => setPreviewZoomed(false)}>
+          {file ? (
+            <Image source={{ uri: file.uri }} style={styles.zoomImage} contentFit="contain" />
+          ) : null}
+          <Pressable style={styles.zoomClose} onPress={() => setPreviewZoomed(false)}>
+            <X color="#ffffff" size={24} />
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Text style={styles.sectionTitle}>Pagos validados pendientes</Text>
       <View style={styles.pendingList}>
@@ -370,6 +390,8 @@ function VoucherScannerModal({
   onCapture,
   onChangeMode,
   onClose,
+  onPreviewLayout,
+  onFrameLayout,
 }: {
   cameraRef: React.MutableRefObject<CameraView | null>;
   mode: ScanMode;
@@ -377,13 +399,27 @@ function VoucherScannerModal({
   onCapture: () => Promise<void>;
   onChangeMode: (mode: ScanMode) => void;
   onClose: () => void;
+  onPreviewLayout: (width: number, height: number) => void;
+  onFrameLayout: (x: number, y: number, width: number, height: number) => void;
 }) {
   const isPagalo = mode === 'pagalo';
+  const frameViewRef = useRef<View | null>(null);
+
+  const handleFrameLayout = () => {
+    frameViewRef.current?.measureInWindow((x, y, w, h) => {
+      onFrameLayout(x, y, w, h);
+    });
+  };
 
   return (
     <Modal animationType="slide" presentationStyle="fullScreen" visible={visible} onRequestClose={onClose}>
       <View style={styles.scannerRoot}>
-        <CameraView ref={cameraRef} facing="back" style={styles.cameraPreview} />
+        <CameraView
+          ref={cameraRef}
+          facing="back"
+          style={styles.cameraPreview}
+          onLayout={(e) => onPreviewLayout(e.nativeEvent.layout.width, e.nativeEvent.layout.height)}
+        />
         <View style={styles.scannerShade}>
           <View style={styles.scannerTopBar}>
             <Pressable style={styles.scannerClose} onPress={onClose}>
@@ -401,7 +437,11 @@ function VoucherScannerModal({
           </View>
 
           <View style={styles.frameStage}>
-            <View style={[styles.documentFrame, isPagalo ? styles.a4Frame : styles.voucherFrame]}>
+            <View
+              ref={frameViewRef}
+              style={[styles.documentFrame, isPagalo ? styles.a4Frame : styles.voucherFrame]}
+              onLayout={handleFrameLayout}
+            >
               <View style={styles.frameBadge}>
                 <Text style={styles.frameBadgeText}>{isPagalo ? 'PAGALO.PE - A4 COMPLETO' : 'VENTANILLA - RECIBO COMPLETO'}</Text>
               </View>
@@ -592,6 +632,49 @@ function formatDateLabel(value: string) {
   return date;
 }
 
+async function cropToFrame(
+  photo: { uri: string; width: number; height: number },
+  preview: { width: number; height: number },
+  frame: { x: number; y: number; width: number; height: number },
+) {
+  if (!preview.width || !preview.height || !frame.width || !frame.height) {
+    return { uri: photo.uri, width: photo.width, height: photo.height };
+  }
+
+  const previewIsPortrait = preview.height >= preview.width;
+  const photoIsPortrait = photo.height >= photo.width;
+  const photoW = previewIsPortrait === photoIsPortrait ? photo.width : photo.height;
+  const photoH = previewIsPortrait === photoIsPortrait ? photo.height : photo.width;
+
+  const scale = Math.max(preview.width / photoW, preview.height / photoH);
+  const visibleW = preview.width / scale;
+  const visibleH = preview.height / scale;
+  const visibleX = (photoW - visibleW) / 2;
+  const visibleY = (photoH - visibleH) / 2;
+
+  const marginFrac = 0.03;
+  const expX = Math.max(0, frame.x - frame.width * marginFrac);
+  const expY = Math.max(0, frame.y - frame.height * marginFrac);
+  const expW = Math.min(preview.width - expX, frame.width * (1 + 2 * marginFrac));
+  const expH = Math.min(preview.height - expY, frame.height * (1 + 2 * marginFrac));
+
+  const originX = Math.max(0, Math.round(visibleX + (expX / preview.width) * visibleW));
+  const originY = Math.max(0, Math.round(visibleY + (expY / preview.height) * visibleH));
+  const width = Math.max(1, Math.round(Math.min((expW / preview.width) * visibleW, photoW - originX)));
+  const height = Math.max(1, Math.round(Math.min((expH / preview.height) * visibleH, photoH - originY)));
+
+  try {
+    const result = await ImageManipulator.manipulateAsync(
+      photo.uri,
+      [{ crop: { originX, originY, width, height } }],
+      { compress: 0.92, format: ImageManipulator.SaveFormat.JPEG },
+    );
+    return { uri: result.uri, width: result.width, height: result.height };
+  } catch {
+    return { uri: photo.uri, width: photo.width, height: photo.height };
+  }
+}
+
 const styles = StyleSheet.create({
 
   scannerRoot: { backgroundColor: '#000000', flex: 1 },
@@ -681,8 +764,11 @@ const styles = StyleSheet.create({
   fileText: { color: '#687784', fontSize: 12, marginTop: 2 },
   exampleCard: { borderColor: '#e1ebf2', borderRadius: 8, borderWidth: 1, height: 150, overflow: 'hidden' },
   exampleImage: { height: '100%', width: '100%' },
-  previewCard: { borderColor: '#bfe3d2', borderRadius: 8, borderWidth: 1, height: 230, overflow: 'hidden' },
+  previewCard: { backgroundColor: '#0b1a27', borderColor: '#bfe3d2', borderRadius: 8, borderWidth: 1, height: 260, overflow: 'hidden' },
   previewImage: { height: '100%', width: '100%' },
+  zoomBackdrop: { alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.94)', flex: 1, justifyContent: 'center' },
+  zoomImage: { height: '100%', width: '100%' },
+  zoomClose: { alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 999, height: 44, justifyContent: 'center', position: 'absolute', right: 18, top: 44, width: 44 },
   previewOverlay: { bottom: 0, gap: 8, left: 0, padding: 10, position: 'absolute', right: 0 },
   previewBadge: { alignItems: 'center', alignSelf: 'flex-start', backgroundColor: 'rgba(15, 122, 89, 0.92)', borderRadius: 999, flexDirection: 'row', gap: 5, paddingHorizontal: 10, paddingVertical: 7 },
   previewBadgeText: { color: '#ffffff', fontSize: 11, fontWeight: '900' },

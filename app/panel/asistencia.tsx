@@ -1,6 +1,7 @@
 import { CalendarCheck, CheckCircle2, Clock, RefreshCw, XCircle } from 'lucide-react-native';
 import { useCallback, useMemo } from 'react';
-import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ListSkeleton } from '@/components/ui/skeleton';
 import { useApiResource } from '@/hooks/use-api-resource';
@@ -27,7 +28,7 @@ export default function AttendanceScreen() {
   const missed = attendance.filter((item) => item.status.toLowerCase().includes('falta') || item.status.toLowerCase().includes('ausente')).length;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <CalendarCheck color="#ffffff" size={30} />

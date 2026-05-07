@@ -1,6 +1,7 @@
 import { CalendarDays, Clock, Link as LinkIcon, MapPin, Phone, UserRound, UsersRound } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Linking, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ListSkeleton } from '@/components/ui/skeleton';
 import { useApiResource } from '@/hooks/use-api-resource';
@@ -50,7 +51,7 @@ export default function ScheduleScreen() {
   }, [days, selectedDay]);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Text style={styles.kicker}>Horario de clases</Text>

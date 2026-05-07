@@ -1,6 +1,7 @@
 import { CheckCircle2, Clock3, LockKeyhole, PlayCircle, Search, UserCheck, UsersRound, XCircle } from 'lucide-react-native';
 import type React from 'react';
-import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const students = [
   { name: 'Ariana Quispe Mamani', code: '20260124', status: 'Presente', color: '#0F7A59' },
@@ -11,7 +12,7 @@ const students = [
 
 export default function TeacherAttendanceScreen() {
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Text style={styles.kicker}>Asistencia docente</Text>

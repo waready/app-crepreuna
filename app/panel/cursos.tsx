@@ -1,6 +1,7 @@
 import { BookMarked, ChevronDown, ChevronRight, Download, FileText, LibraryBig, Video } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
-import { Linking, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CardSkeleton, ListSkeleton } from '@/components/ui/skeleton';
 import { useApiResource } from '@/hooks/use-api-resource';
@@ -65,7 +66,7 @@ export default function CoursesScreen() {
   const temarios = apiTemarios.length ? apiTemarios : fallbackTemarios;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Text style={styles.kicker}>Academico</Text>

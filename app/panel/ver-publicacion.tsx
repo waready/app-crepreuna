@@ -1,5 +1,6 @@
 import { Heart, MessageCircle, Send, Share2, UserRound } from 'lucide-react-native';
-import { SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const comments = [
   { name: 'Sofia', text: 'Gracias profe, el material del simulacro esta muy claro.' },
@@ -8,7 +9,7 @@ const comments = [
 
 export default function PublicationDetailScreen() {
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Text style={styles.kicker}>Publicacion</Text>

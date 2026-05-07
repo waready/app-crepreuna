@@ -1,6 +1,7 @@
 import { AlertTriangle, CheckCircle2, FileUp, MessageSquareText, Send, ShieldCheck } from 'lucide-react-native';
 import type React from 'react';
-import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const cases = [
   { code: 'LR-2026-0018', title: 'Consulta sobre constancia', state: 'Respondido', color: '#0F7A59' },
@@ -9,7 +10,7 @@ const cases = [
 
 export default function ClaimsScreen() {
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Text style={styles.kicker}>Libro de reclamaciones</Text>

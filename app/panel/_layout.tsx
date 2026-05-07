@@ -1,8 +1,9 @@
 import { router, Tabs, usePathname } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { BookOpen, CalendarDays, ClipboardCheck, CreditCard, Grid2X2, MessageCircle } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { hasValidatedSession, saveLastPanelPath } from '@/services/api';
@@ -54,14 +55,17 @@ export default function PanelTabLayout() {
   }
 
   return (
-    <Tabs
+    <View style={styles.panelRoot}>
+      <StatusBar style="light" />
+      <SafeAreaView edges={['top']} style={styles.topStatusBar} />
+      <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#00365A',
-        tabBarInactiveTintColor: '#8a99a6',
+        tabBarActiveTintColor: '#ffffff',
+        tabBarInactiveTintColor: '#9bb3c2',
         tabBarStyle: {
-          backgroundColor: '#ffffff',
-          borderTopColor: '#e1ebf2',
-          borderTopWidth: 1,
+          backgroundColor: '#00365A',
+          borderTopColor: '#00365A',
+          borderTopWidth: 0,
           height: 66 + Math.max(insets.bottom, 10),
           paddingBottom: Math.max(insets.bottom, 10),
           paddingTop: 8,
@@ -152,7 +156,8 @@ export default function PanelTabLayout() {
       <Tabs.Screen name="perfil" options={{ href: null }} />
       <Tabs.Screen name="reclamaciones" options={{ href: null }} />
       <Tabs.Screen name="ver-publicacion" options={{ href: null }} />
-    </Tabs>
+      </Tabs>
+    </View>
   );
 }
 
@@ -161,6 +166,8 @@ function TabIcon({ children, focused }: { children: React.ReactNode; focused: bo
 }
 
 const styles = StyleSheet.create({
+  panelRoot: { flex: 1 },
+  topStatusBar: { backgroundColor: '#00365A' },
   guardScreen: { alignItems: 'center', backgroundColor: '#f3f7fa', flex: 1, gap: 12, justifyContent: 'center' },
   guardText: { color: '#00365A', fontSize: 13, fontWeight: '900' },
   iconBubble: {
@@ -171,6 +178,6 @@ const styles = StyleSheet.create({
     width: 38,
   },
   iconBubbleActive: {
-    backgroundColor: '#e5f4fb',
+    backgroundColor: '#006CAF',
   },
 });

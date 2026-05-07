@@ -1,7 +1,8 @@
 import { Image } from 'expo-image';
 import { CheckCircle2, Mail, MapPin, Phone, UserRound } from 'lucide-react-native';
 import { useCallback, useMemo } from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useApiResource } from '@/hooks/use-api-resource';
 import { api } from '@/services/api';
@@ -13,7 +14,7 @@ export default function ProfileScreen() {
   const profile = useMemo(() => normalizeProfile(data), [data]);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View style={styles.avatar}>

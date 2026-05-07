@@ -23,7 +23,7 @@ export default function RootLayout() {
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         </Stack>
         <ConnectivityBanner />
-        <StatusBar style="light" />
+        <StatusBar style="auto" />
       </ThemeProvider>
     </SafeAreaProvider>
   );
