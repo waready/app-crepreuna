@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { api, clearSessionId, getSessionId } from '@/services/api';
+import { api, clearAccessToken, getAccessToken } from '@/services/api';
 import {
   checkConnectivity,
   startConnectivityMonitor,
@@ -56,16 +56,16 @@ export function ConnectivityBanner() {
     validatingRef.current = true;
     setValidatingSession(true);
     try {
-      const hasSession = Boolean(await getSessionId());
+      const hasSession = Boolean(await getAccessToken());
       if (hasSession && pathname.startsWith('/panel')) {
-        await api.verifySession();
+        await api.auth.me();
       }
       setOnlineNotice(true);
       setTimeout(() => setOnlineNotice(false), 2800);
     } catch (error) {
       const message = error instanceof Error ? error.message.toLowerCase() : '';
       if (!message.includes('sin conexion') && !message.includes('network') && !message.includes('timeout')) {
-        await clearSessionId();
+        await clearAccessToken();
         router.replace('/');
       }
     } finally {

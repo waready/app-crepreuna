@@ -1,572 +1,409 @@
-import axios, { AxiosError, type AxiosRequestConfig, type AxiosResponse } from 'axios';
-import { router } from 'expo-router';
+import axios, { AxiosError, type AxiosRequestConfig } from 'axios';
+import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
-import CookieManager from '@/services/cookie-manager';
-import { markNetworkFailure, markNetworkSuccess } from '@/services/connectivity';
+import type {
+  AcademicMaterial,
+  AttendanceItem,
+  Comment,
+  CourseCriterion,
+  DashboardData,
+  NotificationItem,
+  PaginationMeta,
+  PaymentValidation,
+  PaymentsData,
+  Period,
+  Publication,
+  QuestionBatch,
+  QuestionCourse,
+  SessionData,
+  StudentAttendance,
+  StudentCourse,
+  StudentSchedule,
+  TeacherCourse,
+  TeacherSchedule,
+  TeacherSession,
+  TeacherStudent,
+  UploadFile,
+  UserProfile,
+  UserRole,
+  VocationalTest,
+} from '@/services/api-types';
 
-const REMOTE_API_BASE_URL = 'https://back.waready.org.pe';
+const DEFAULT_API_BASE_URL = 'https://sistemas.cepreuna.edu.pe/api/app/v1';
+const TOKEN_KEY = 'cepreuna_app_access_token_v1';
 
-export const API_BASE_URL =
-  Platform.OS === 'web' ? (process.env.EXPO_PUBLIC_API_BASE_URL ?? '') : REMOTE_API_BASE_URL;
+export const API_BASE_URL = (
+  process.env.EXPO_PUBLIC_API_BASE_URL || DEFAULT_API_BASE_URL
+).replace(/\/+$/, '');
 
-const SESSION_KEY = 'cepreuna_session_id';
-const SESSION_VALIDATED_KEY = 'cepreuna_session_validated';
-const LAST_PANEL_PATH_KEY = 'cepreuna_last_panel_path';
-const NATIVE_SESSION_MAX_AGE_DAYS = 7;
-let memorySessionId: string | null = null;
-let memorySessionValidated = false;
-let memoryLastPanelPath: string | null = null;
-let redirectingToLogin = false;
+let memoryToken: string | null = null;
+const unauthorizedListeners = new Set<() => void>();
 
-type LoginPayload = {
-  email: string;
-  password: string;
-};
+export class ApiError extends Error {
+  status?: number;
+  errors?: Record<string, string[]>;
 
-type VoucherPayload = {
-  pagarEnPagalo: boolean;
-  secuencia: string;
-  monto: string | number;
-  fecha: string;
-  documento: string;
-  file: {
-    uri: string;
-    name?: string;
-    type?: string;
-  };
-};
+  constructor(message: string, status?: number, errors?: Record<string, string[]>) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.errors = errors;
+  }
+}
 
-type PublicacionPayload = {
-  usuario: string;
-  texto: string;
-  tipo: number;
-  imagen?: {
-    uri: string;
-    name?: string;
-    type?: string;
-  } | null;
-};
-
-type VocationalAnswerPayload = {
-  estudiante_id: number;
-  estudiante_nombre: string;
-  estudiante_dni: string;
-  puntaje_ingeneria: number;
-  puntaje_biologia: number;
-  puntaje_sociales: number;
-  detalles: Array<{
-    nro_documento: string;
-    puntaje: number;
-    tipo: string;
-    preguntas_id: number;
-    respuesta_id: number;
-  }>;
-};
+type ApiEnvelope<T> = { data: T; message?: string };
+type PagedEnvelope<T> = { data: T[]; meta: PaginationMeta };
 
 const client = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 20000,
-  withCredentials: true,
+  timeout: 30000,
   headers: {
     Accept: 'application/json',
+    'X-Requested-With': 'XMLHttpRequest',
   },
 });
 
 client.interceptors.request.use(async (config) => {
-  const sessionId = await getSessionId();
-  if (sessionId) {
-    config.headers.set('X-Session-ID', sessionId);
-  }
-  if (sessionId && Platform.OS !== 'web') {
-    config.headers.set('Cookie', `session_id=${sessionId}`);
+  const token = await getAccessToken();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
 
 client.interceptors.response.use(
-  async (response) => {
-    markNetworkSuccess();
-    const sessionId = readSessionFromHeaders(response.headers);
-    if (sessionId) {
-      await setSessionId(sessionId);
+  (response) => response,
+  (error: AxiosError) => {
+    const apiError = toApiError(error);
+    if (apiError.status === 401) {
+      unauthorizedListeners.forEach((listener) => listener());
     }
-    await redirectIfSessionExpired(response);
-    return response;
-  },
-  async (error: AxiosError) => {
-    if (isNetworkAxiosError(error)) {
-      markNetworkFailure();
-    }
-    const message = extractErrorMessage(error);
-    const requestUrl = String(error.config?.url ?? '');
-    const isLoginRequest = requestUrl.includes('/api/login');
-    if (!isLoginRequest && (isSessionExpiredMessage(message) || error.response?.status === 401 || error.response?.status === 403)) {
-      await handleSessionExpired();
-      return Promise.reject(new SessionExpiredError());
-    }
-    return Promise.reject(new Error(message));
+    return Promise.reject(apiError);
   }
 );
 
 export const api = {
-  async login(payload: LoginPayload) {
-    await clearSessionId();
-    if (Platform.OS !== 'web' && await readNativeSessionCookie()) {
-      throw new Error('No se pudo limpiar la sesion anterior. Cierra la app o reinstala el APK e intenta nuevamente.');
-    }
-    const { data, headers } = await client.post('/api/login', payload);
-    if (!isSuccessfulLoginResponse(data)) {
-      throw new Error(extractLoginFailureMessage(data) ?? 'Credenciales incorrectas o sesion no valida.');
-    }
-    const sessionId = readSessionFromHeaders(headers) ?? readSessionFromBody(data);
-    if (sessionId) {
-      await setSessionId(sessionId);
-    } else if (Platform.OS !== 'web') {
-      await clearSessionId();
-      throw new Error('Login correcto, pero el backend no envio session_id para Android. Agrega session_id en el JSON o expone Set-Cookie.');
-    } else {
-      await markSessionValidated();
-    }
-    return data;
+  auth: {
+    async login(payload: { usuario: string; password: string; rol?: UserRole }) {
+      await clearAccessToken();
+      const data = await post<SessionData>('/auth/login', payload);
+      await setAccessToken(data.access_token);
+      return data;
+    },
+    async google(payload: { id_token: string; rol?: UserRole }) {
+      await clearAccessToken();
+      const data = await post<SessionData>('/auth/google', payload);
+      await setAccessToken(data.access_token);
+      return data;
+    },
+    async me() {
+      return get<{ usuario: UserProfile; periodo: Period }>('/auth/me');
+    },
+    async logout() {
+      try {
+        await postMessage('/auth/logout');
+      } finally {
+        await clearAccessToken();
+      }
+    },
+    guardianRelations: () => get<Array<{ id: number; denominacion: string }>>('/auth/apoderado/parentescos'),
+    async guardian(payload: Record<string, string | number>) {
+      await clearAccessToken();
+      const data = await post<SessionData>('/auth/apoderado', payload);
+      await setAccessToken(data.access_token);
+      return data;
+    },
   },
 
-  async logout() {
-    const { data } = await client.post('/api/logout');
-    await clearSessionId();
-    return data;
+  dashboard: () => get<DashboardData>('/dashboard'),
+  period: () => get<Period>('/periodo'),
+
+  profile: {
+    show: () => get<UserProfile>('/perfil'),
+    update: (payload: Partial<Pick<UserProfile, 'celular' | 'email' | 'direccion' | 'fecha_nac' | 'anio_egreso'>>) =>
+      patch<UserProfile>('/perfil', payload),
+    confirm: () => postMessage('/perfil/confirmar'),
+    async updatePhoto(file: UploadFile) {
+      const form = new FormData();
+      await appendUpload(form, 'foto', file);
+      return postForm<UserProfile>('/perfil/foto', form);
+    },
+    photoUrl: () => absoluteApiUrl('/perfil/foto'),
   },
 
-  async verifySession() {
-    const data = await get('/api/verify-session');
-    if (!isValidSessionResponse(data)) {
-      throw new Error('Sesion no valida o expirada.');
-    }
-    return data;
-  },
-  async validateAuthenticatedAccess() {
-    const [session, profile] = await Promise.all([api.verifySession(), api.getPerfil()]);
-    if (!isValidSessionResponse(session) || isSessionExpiredPayload(profile) || hasApiError(profile)) {
-      throw new Error(extractApiMessage(profile) ?? 'No se pudo validar el acceso del usuario.');
-    }
-    return { session, profile };
-  },
-  getHorario: () => get('/api/horario'),
-  getCarga: () => get('/api/carga'),
-  getAsistencias: () => get('/api/asistencias'),
-  getRangoFechas: () => get('/api/rango-fechas'),
-  getCuadernillos: () => get('/api/cuadernillos'),
-  getCuadernillosFormat: () => get('/api/cuadernillos-format'),
-  getTemarios: () => get('/api/temarios'),
-  getCriteriosDocente: (modalidad = 1) => get('/api/criterios-docente', { params: { modalidad } }),
-  getPublicaciones: (page = 1, tipo = 1) => get('/api/publicaciones', { params: { page, tipo } }),
-  getDashboard: () => get('/api/page/dashboard'),
-  getPerfil: () => get('/api/page/perfil'),
-  getPageHorarios: () => get('/api/page/horarios'),
-  getMisCursos: () => get('/api/page/mis-cursos'),
-  getPageCuadernillos: () => get('/api/page/cuadernillos'),
-  getPageAsistencias: () => get('/api/page/asistencias'),
-  getPagePagos: () => get('/api/page/pagos'),
-  getPreguntas: () => get('/api/preguntas'),
-  getRespuestas: () => get('/api/respuestas'),
-  getRespuestasDetalle: () => get('/api/respuestas-detalle'),
-  getConstancia: (estudianteId: number) => get(`/api/page/constancia/${estudianteId}`),
-
-  async validarCuota(userId: number, payload: VoucherPayload) {
-    const formData = new FormData();
-    formData.append('pagarEnPagalo', String(payload.pagarEnPagalo));
-    formData.append('secuencia', payload.secuencia);
-    formData.append('monto', String(payload.monto));
-    formData.append('fecha', payload.fecha);
-    formData.append('documento', payload.documento);
-    formData.append('file', toUploadFile(payload.file));
-
-    const { data } = await client.post(`/api/pagos/${userId}`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
-    return data;
+  student: {
+    schedule: () => get<StudentSchedule>('/estudiante/horario'),
+    attendance: () => get<StudentAttendance>('/estudiante/asistencias'),
+    courses: () => get<StudentCourse[]>('/estudiante/cursos'),
+    criteria: (loadId: number) => get<CourseCriterion[]>(`/estudiante/cursos/${loadId}/criterios`),
+    rateTeacher: (loadId: number, respuestas: Array<{ criterio_id: number; puntaje: number }>) =>
+      postMessage(`/estudiante/cursos/${loadId}/calificacion`, { respuestas }),
+    booklets: () => get<AcademicMaterial[]>('/estudiante/cuadernillos'),
+    syllabi: () => get<AcademicMaterial[]>('/estudiante/temarios'),
+    payments: () => get<PaymentsData>('/estudiante/pagos'),
+    validatePayment: (payload: PaymentFormFields) =>
+      post<PaymentValidation>('/estudiante/pagos/validar', payload),
+    async submitPayment(payload: PaymentFormFields & { voucher: UploadFile }) {
+      const form = paymentForm(payload);
+      await appendUpload(form, 'voucher', payload.voucher);
+      return postMessage('/estudiante/pagos', form);
+    },
+    test: () => get<VocationalTest>('/estudiante/test-vocacional'),
+    submitTest: (respuestas: Array<{ pregunta_id: number; respuesta: boolean }>) =>
+      postMessage('/estudiante/test-vocacional', { respuestas }),
+    testCertificateUrl: () => absoluteApiUrl('/estudiante/test-vocacional/constancia'),
+    enrollmentCertificateUrl: () => absoluteApiUrl('/estudiante/constancia-matricula'),
   },
 
-  async registrarPago(tokens: string[]) {
-    const { data } = await client.post('/api/registrar-pago', { tokens });
-    return data;
+  teacher: {
+    schedule: () => get<TeacherSchedule>('/docente/horario'),
+    attendance: () => get<AttendanceItem[]>('/docente/asistencias'),
+    courses: () => get<TeacherCourse[]>('/docente/cursos'),
+    updateMeet: (loadId: number, meetUrl: string) =>
+      patchMessage(`/docente/cursos/${loadId}/meet`, { meet_url: meetUrl }),
+    students: (loadId: number) => get<TeacherStudent[]>(`/docente/cursos/${loadId}/estudiantes`),
+    booklets: () => get<AcademicMaterial[]>('/docente/cuadernillos'),
+    syllabi: () => get<AcademicMaterial[]>('/docente/temarios'),
+    sessions: (loadId?: number) =>
+      get<TeacherSession[]>('/docente/sesiones', loadId ? { params: { carga_id: loadId } } : undefined),
+    session: (id: number) => get<TeacherSession>(`/docente/sesiones/${id}`),
+    createSession: (payload: TeacherSessionPayload) => postMessage('/docente/sesiones', payload),
+    updateSession: (id: number, payload: TeacherSessionPayload) =>
+      putMessage(`/docente/sesiones/${id}`, payload),
+    deleteSession: (id: number) => deleteMessage(`/docente/sesiones/${id}`),
+    questionCourses: () => get<QuestionCourse[]>('/docente/banco-preguntas/cursos'),
+    questionBatches: () => get<QuestionBatch[]>('/docente/banco-preguntas'),
+    questionTemplateUrl: () => absoluteApiUrl('/docente/banco-preguntas/plantilla'),
+    async submitQuestions(payload: {
+      curso_id: number;
+      semana: number;
+      nivel: string;
+      archivo: UploadFile;
+    }) {
+      const form = new FormData();
+      form.append('curso_id', String(payload.curso_id));
+      form.append('semana', String(payload.semana));
+      form.append('nivel', payload.nivel);
+      await appendUpload(form, 'archivo', payload.archivo);
+      return postMessage('/docente/banco-preguntas', form);
+    },
+    deleteQuestions: (id: number) => deleteMessage(`/docente/banco-preguntas/${id}`),
   },
 
-  async crearPublicacion(payload: PublicacionPayload) {
-    const formData = new FormData();
-    formData.append('usuario', payload.usuario);
-    formData.append('texto', payload.texto);
-    formData.append('tipo', String(payload.tipo));
-    if (payload.imagen) {
-      formData.append('imagen', toUploadFile(payload.imagen));
-    }
-
-    const { data } = await client.post('/api/crear-publicacion', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
-    return data;
-  },
-
-  async crearPregunta(payload: { denominacion: string; tipo: string; area: string; puntaje: number }) {
-    const formData = toUrlEncoded(payload);
-    const { data } = await client.post('/api/preguntas', formData, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    });
-    return data;
-  },
-
-  async crearRespuesta(payload: {
-    estudiante_id: number;
-    estudiante_nombre: string;
-    estudiante_dni: string;
-    puntaje_ingeneria: number;
-    puntaje_biologia: number;
-    puntaje_sociales: number;
-  }) {
-    const formData = toUrlEncoded(payload);
-    const { data } = await client.post('/api/respuestas', formData, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    });
-    return data;
-  },
-
-  async crearRespuestaDetalle(payload: {
-    nro_documento: string;
-    puntaje: number;
-    tipo: string;
-    preguntas_id: number;
-    respuesta_id: number;
-  }) {
-    const formData = toUrlEncoded(payload);
-    const { data } = await client.post('/api/respuestas-detalle', formData, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    });
-    return data;
-  },
-
-  async crearRespuestaCompleta(payload: VocationalAnswerPayload) {
-    const { data } = await client.post('/api/respuestasAll', payload);
-    return data;
-  },
-
-  async comprobarRespuesta(dni: string) {
-    const formData = toUrlEncoded({ dni });
-    const { data } = await client.post('/api/respuestas/comprobar', formData, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    });
-    return data;
+  social: {
+    publications: (page = 1, type: '1' | '2' = '1') =>
+      getPage<Publication>('/social/publicaciones', { params: { page, tipo: type, per_page: 15 } }),
+    publication: (id: number) => get<Publication>(`/social/publicaciones/${id}`),
+    async createPublication(payload: { texto: string; tipo?: '1' | '2'; imagen?: UploadFile | null; archivo?: UploadFile | null }) {
+      const form = new FormData();
+      form.append('texto', payload.texto);
+      form.append('tipo', payload.tipo ?? '1');
+      if (payload.imagen) await appendUpload(form, 'imagen', payload.imagen);
+      if (payload.archivo) await appendUpload(form, 'archivo', payload.archivo);
+      return postMessage('/social/publicaciones', form);
+    },
+    deletePublication: (id: number) => deleteMessage(`/social/publicaciones/${id}`),
+    like: (id: number) => put<{ liked: boolean; likes: number }>(`/social/publicaciones/${id}/like`),
+    unlike: (id: number) => del<{ liked: boolean; likes: number }>(`/social/publicaciones/${id}/like`),
+    comments: (id: number) => get<Comment[]>(`/social/publicaciones/${id}/comentarios`),
+    addComment: (id: number, texto: string, parentId?: number) =>
+      postMessage(`/social/publicaciones/${id}/comentarios`, { texto, parent_id: parentId }),
+    deleteComment: (id: number) => deleteMessage(`/social/comentarios/${id}`),
+    notifications: (page = 1) =>
+      getPage<NotificationItem>('/social/notificaciones', { params: { page, per_page: 20 } }),
+    readNotifications: () => patchMessage('/social/notificaciones/leer'),
   },
 };
 
-async function get(path: string, config?: AxiosRequestConfig) {
-  const { data } = await client.get(path, config);
-  return data;
+type PaymentFormFields = {
+  secuencia: string;
+  monto: number | string;
+  fecha: string;
+  folio?: string;
+  concepto?: 'cuota' | 'mora';
+  canal_pago?: 'pagalo' | 'ventanilla';
+};
+
+type TeacherSessionPayload = {
+  carga_id: number;
+  fecha: string;
+  tema: string;
+  semana?: string | null;
+};
+
+async function get<T>(path: string, config?: AxiosRequestConfig): Promise<T> {
+  const response = await client.get<ApiEnvelope<T>>(path, config);
+  return response.data.data;
 }
 
-class SessionExpiredError extends Error {
-  constructor() {
-    super('SESSION_EXPIRED_REDIRECT');
-    this.name = 'SessionExpiredError';
-  }
+async function getPage<T>(path: string, config?: AxiosRequestConfig): Promise<PagedEnvelope<T>> {
+  const response = await client.get<PagedEnvelope<T>>(path, config);
+  return response.data;
 }
 
-async function redirectIfSessionExpired(response: AxiosResponse) {
-  if (isSessionExpiredPayload(response.data)) {
-    await handleSessionExpired();
-    throw new SessionExpiredError();
-  }
+async function post<T>(path: string, payload?: unknown): Promise<T> {
+  const response = await client.post<ApiEnvelope<T>>(path, payload);
+  return response.data.data;
 }
 
-function isSessionExpiredPayload(data: unknown) {
-  const message = extractApiMessage(data);
-  return Boolean(message && isSessionExpiredMessage(message));
+async function put<T>(path: string, payload?: unknown): Promise<T> {
+  const response = await client.put<ApiEnvelope<T>>(path, payload);
+  return response.data.data;
 }
 
-function isSessionExpiredMessage(message: string) {
-  const normalized = message
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-  return normalized.includes('sesion no valida')
-    || normalized.includes('sesion expirada')
-    || normalized.includes('session expired')
-    || normalized.includes('session_expired');
+async function patch<T>(path: string, payload?: unknown): Promise<T> {
+  const response = await client.patch<ApiEnvelope<T>>(path, payload);
+  return response.data.data;
 }
 
-async function handleSessionExpired() {
-  await clearSessionId();
-  if (!redirectingToLogin) {
-    redirectingToLogin = true;
-    router.replace('/');
-    setTimeout(() => {
-      redirectingToLogin = false;
-    }, 1200);
-  }
+async function del<T>(path: string): Promise<T> {
+  const response = await client.delete<ApiEnvelope<T>>(path);
+  return response.data.data;
 }
 
-function readSessionFromHeaders(headers: AxiosRequestConfig['headers']) {
-  const cookieHeader = headers?.['set-cookie'] ?? headers?.['Set-Cookie'];
-  const cookieText = Array.isArray(cookieHeader) ? cookieHeader.join(';') : String(cookieHeader ?? '');
-  const match = cookieText.match(/session_id=([^;]+)/);
-  return match?.[1] ?? null;
+async function postForm<T>(path: string, form: FormData): Promise<T> {
+  const response = await client.post<ApiEnvelope<T>>(path, form);
+  return response.data.data;
 }
 
-function readSessionFromBody(data: unknown) {
-  return findSessionValue(data);
+async function postMessage(path: string, payload?: unknown): Promise<string> {
+  const response = await client.post<{ message?: string }>(path, payload);
+  return response.data.message ?? 'Operacion realizada correctamente.';
 }
 
-function extractApiMessage(data: unknown) {
-  if (data && typeof data === 'object') {
-    const record = data as Record<string, unknown>;
-    if (typeof record.error === 'string') {
-      return record.error;
-    }
-    if (typeof record.message === 'string') {
-      return record.message;
-    }
-    if (typeof record.detail === 'string') {
-      return record.detail;
-    }
-  }
-  return null;
+async function putMessage(path: string, payload?: unknown): Promise<string> {
+  const response = await client.put<{ message?: string }>(path, payload);
+  return response.data.message ?? 'Cambios guardados correctamente.';
 }
 
-function extractErrorMessage(error: AxiosError) {
-  if (isNetworkAxiosError(error)) {
-    return 'Sin conexion a internet. Revisa tus datos o Wi-Fi e intenta nuevamente.';
-  }
-
-  const data = error.response?.data;
-  if (data && typeof data === 'object') {
-    const directError = (data as { error?: unknown }).error;
-    if (typeof directError === 'string') {
-      return directError;
-    }
-    const message = (data as { message?: unknown }).message;
-    if (typeof message === 'string') {
-      return message;
-    }
-    const detail = (data as { detail?: unknown }).detail;
-    if (typeof detail === 'string') {
-      return detail;
-    }
-    if (Array.isArray(detail) && detail[0] && typeof detail[0] === 'object') {
-      return String((detail[0] as { msg?: string }).msg ?? 'Error de validacion');
-    }
-  }
-  return error.message || 'No se pudo conectar con el servidor';
+async function patchMessage(path: string, payload?: unknown): Promise<string> {
+  const response = await client.patch<{ message?: string }>(path, payload);
+  return response.data.message ?? 'Cambios guardados correctamente.';
 }
 
-function isValidSessionResponse(data: unknown) {
-  if (!data || typeof data !== 'object') {
-    return false;
-  }
-  const record = data as Record<string, unknown>;
-  return record.success === true;
+async function deleteMessage(path: string): Promise<string> {
+  const response = await client.delete<{ message?: string }>(path);
+  return response.data.message ?? 'Registro eliminado correctamente.';
 }
 
-function isSuccessfulLoginResponse(data: unknown) {
-  if (!data || typeof data !== 'object') {
-    return false;
-  }
-  const record = data as Record<string, unknown>;
-  if (record.success !== true || record.error) {
-    return false;
-  }
-  if ('cuadernillo' in record && !record.cuadernillo) {
-    return false;
-  }
-  return true;
+function paymentForm(payload: PaymentFormFields) {
+  const form = new FormData();
+  form.append('secuencia', payload.secuencia);
+  form.append('monto', String(payload.monto));
+  form.append('fecha', payload.fecha);
+  if (payload.folio) form.append('folio', payload.folio);
+  if (payload.concepto) form.append('concepto', payload.concepto);
+  if (payload.canal_pago) form.append('canal_pago', payload.canal_pago);
+  return form;
 }
 
-function isNetworkAxiosError(error: AxiosError) {
-  const message = String(error.message).toLowerCase();
-  return !error.response
-    || error.code === 'ERR_NETWORK'
-    || error.code === 'ECONNABORTED'
-    || message.includes('network')
-    || message.includes('timeout');
-}
-
-function extractLoginFailureMessage(data: unknown) {
-  if (data && typeof data === 'object') {
-    const record = data as Record<string, unknown>;
-    if (typeof record.error === 'string') {
-      return record.error;
-    }
-    if (record.success === false && typeof record.message === 'string') {
-      return record.message;
-    }
-    if (typeof record.detail === 'string') {
-      return record.detail;
-    }
-  }
-  return null;
-}
-
-function hasApiError(data: unknown) {
-  return Boolean(extractApiMessage(data));
-}
-
-function findSessionValue(value: unknown): string | null {
-  if (!value || typeof value !== 'object') {
-    return null;
-  }
-
-  const record = value as Record<string, unknown>;
-  const directValue =
-    record.session_id ??
-    record.sessionId ??
-    record.session ??
-    record.token ??
-    record.access_token ??
-    record.accessToken;
-
-  if (typeof directValue === 'string' && directValue.trim()) {
-    return directValue;
-  }
-
-  for (const nestedValue of Object.values(record)) {
-    if (nestedValue && typeof nestedValue === 'object') {
-      const found = findSessionValue(nestedValue);
-      if (found) {
-        return found;
-      }
-    }
-  }
-
-  return null;
-}
-
-function toUrlEncoded(payload: Record<string, string | number | boolean>) {
-  const form = new URLSearchParams();
-  Object.entries(payload).forEach(([key, value]) => form.append(key, String(value)));
-  return form.toString();
-}
-
-function toUploadFile(file: VoucherPayload['file']) {
-  return {
-    uri: file.uri,
-    name: file.name ?? 'voucher.jpg',
-    type: file.type ?? 'image/jpeg',
-  } as unknown as Blob;
-}
-
-async function setSessionId(sessionId: string) {
-  memorySessionId = sessionId;
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    window.localStorage.setItem(SESSION_KEY, sessionId);
-  } else {
-    await setNativePersistentCookie('session_id', sessionId);
-  }
-}
-
-export async function getSessionId() {
-  if (memorySessionId) {
-    return memorySessionId;
-  }
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    memorySessionId = window.localStorage.getItem(SESSION_KEY);
-  } else {
-    memorySessionId = await readNativeSessionCookie();
-  }
-  return memorySessionId;
-}
-
-export async function markSessionValidated() {
-  memorySessionValidated = true;
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    window.localStorage.setItem(SESSION_VALIDATED_KEY, 'true');
-  }
-}
-
-export async function saveLastPanelPath(path: string) {
-  if (!path.startsWith('/panel')) {
+async function appendUpload(form: FormData, field: string, file: UploadFile) {
+  const mimeType = file.mimeType || inferMimeType(file.name);
+  if (Platform.OS === 'web') {
+    const blob = await fetch(file.uri).then((response) => response.blob());
+    form.append(field, blob, file.name);
     return;
   }
-  memoryLastPanelPath = path;
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    window.localStorage.setItem(LAST_PANEL_PATH_KEY, path);
-  } else {
-    await setNativePersistentCookie(LAST_PANEL_PATH_KEY, encodeURIComponent(path));
-  }
+  form.append(field, {
+    uri: file.uri,
+    name: file.name,
+    type: mimeType,
+  } as unknown as Blob);
 }
 
-export async function getLastPanelPath() {
-  if (memoryLastPanelPath?.startsWith('/panel')) {
-    return memoryLastPanelPath;
-  }
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    memoryLastPanelPath = window.localStorage.getItem(LAST_PANEL_PATH_KEY) ?? '/panel';
-  } else {
-    const value = await readNativeCookie(LAST_PANEL_PATH_KEY);
-    try {
-      memoryLastPanelPath = value ? decodeURIComponent(value) : '/panel';
-    } catch {
-      memoryLastPanelPath = '/panel';
-    }
-  }
-  return memoryLastPanelPath?.startsWith('/panel') ? memoryLastPanelPath : '/panel';
+function inferMimeType(name: string) {
+  const extension = name.split('.').pop()?.toLowerCase();
+  const types: Record<string, string> = {
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    pdf: 'application/pdf',
+    png: 'image/png',
+    webp: 'image/webp',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+  };
+  return types[extension ?? ''] ?? 'application/octet-stream';
 }
 
-export async function hasValidatedSession() {
-  if (memorySessionValidated) {
-    return true;
+function toApiError(error: AxiosError): ApiError {
+  if (!error.response) {
+    const timeout = error.code === 'ECONNABORTED';
+    return new ApiError(timeout
+      ? 'El servidor esta tardando demasiado. Intenta nuevamente.'
+      : 'No pudimos conectar con CEPREUNA. Revisa tu internet e intenta nuevamente.');
   }
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    memorySessionValidated = window.localStorage.getItem(SESSION_VALIDATED_KEY) === 'true';
-  } else {
-    // En Android una suspension puede matar el JS runtime y perder los flags en memoria.
-    // Si existe la cookie local, dejamos que el guard valide contra el backend.
-    memorySessionValidated = Boolean(await getSessionId());
-  }
-  return memorySessionValidated;
+
+  const payload = error.response.data as {
+    message?: string;
+    error?: string;
+    errors?: Record<string, string[]>;
+  } | undefined;
+  const validationMessage = payload?.errors
+    ? Object.values(payload.errors).flat().find(Boolean)
+    : undefined;
+  const message = validationMessage
+    || payload?.message
+    || payload?.error
+    || (error.response.status >= 500
+      ? 'El servidor no pudo completar la operacion.'
+      : 'No se pudo completar la solicitud.');
+  return new ApiError(message, error.response.status, payload?.errors);
 }
 
-export async function clearSessionId() {
-  memorySessionId = null;
-  memorySessionValidated = false;
-  memoryLastPanelPath = null;
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    window.localStorage.removeItem(SESSION_KEY);
-    window.localStorage.removeItem(SESSION_VALIDATED_KEY);
-    window.localStorage.removeItem(LAST_PANEL_PATH_KEY);
-  } else {
-    await CookieManager.clearByName(REMOTE_API_BASE_URL, 'session_id', true).catch(() => undefined);
-    await CookieManager.clearByName(REMOTE_API_BASE_URL, 'session_id', false).catch(() => undefined);
-    await CookieManager.clearAll(true);
-    await CookieManager.clearAll(false);
-  }
-}
-
-async function readNativeSessionCookie() {
-  return readNativeCookie('session_id');
-}
-
-async function readNativeCookie(name: string) {
+export async function getAccessToken() {
+  if (memoryToken) return memoryToken;
   if (Platform.OS === 'web') {
-    return null;
+    memoryToken = typeof window !== 'undefined' ? window.localStorage.getItem(TOKEN_KEY) : null;
+  } else {
+    memoryToken = await SecureStore.getItemAsync(TOKEN_KEY);
   }
+  return memoryToken;
+}
 
-  try {
-    const cookies = await CookieManager.get(REMOTE_API_BASE_URL);
-    return cookies[name]?.value ?? null;
-  } catch {
-    return null;
+export async function setAccessToken(token: string) {
+  memoryToken = token;
+  if (Platform.OS === 'web') {
+    if (typeof window !== 'undefined') window.localStorage.setItem(TOKEN_KEY, token);
+  } else {
+    await SecureStore.setItemAsync(TOKEN_KEY, token, {
+      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+    });
   }
 }
 
-async function setNativePersistentCookie(name: string, value: string) {
-  const expires = new Date(Date.now() + NATIVE_SESSION_MAX_AGE_DAYS * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .replace('Z', '+00:00');
-  await CookieManager.set(REMOTE_API_BASE_URL, {
-    name,
-    value,
-    domain: 'back.waready.org.pe',
-    path: '/',
-    version: '1',
-    expires,
-    secure: true,
-  });
+export async function clearAccessToken() {
+  memoryToken = null;
+  if (Platform.OS === 'web') {
+    if (typeof window !== 'undefined') window.localStorage.removeItem(TOKEN_KEY);
+  } else {
+    await SecureStore.deleteItemAsync(TOKEN_KEY);
+  }
+}
+
+export function subscribeUnauthorized(listener: () => void) {
+  unauthorizedListeners.add(listener);
+  return () => unauthorizedListeners.delete(listener);
+}
+
+export function absoluteApiUrl(pathOrUrl: string) {
+  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
+  if (pathOrUrl.startsWith('/')) {
+    return `${new URL(API_BASE_URL).origin}${pathOrUrl}`;
+  }
+  return `${API_BASE_URL}/${pathOrUrl.replace(/^\/+/, '')}`;
+}
+
+export async function authorizedHeaders(): Promise<Record<string, string>> {
+  const token = await getAccessToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+export function isTrustedApiUrl(pathOrUrl: string) {
+  try {
+    const target = new URL(absoluteApiUrl(pathOrUrl));
+    const base = new URL(API_BASE_URL);
+    return target.protocol === 'https:' && target.host === base.host;
+  } catch {
+    return false;
+  }
 }

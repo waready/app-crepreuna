@@ -1,232 +1,311 @@
-import { CalendarDays, Clock, Link as LinkIcon, MapPin, Phone, UserRound, UsersRound } from 'lucide-react-native';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  BookOpenText,
+  CalendarDays,
+  Clock3,
+  Coffee,
+  MapPinned,
+  UserRound,
+  UsersRound,
+} from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
 
-import { ListSkeleton } from '@/components/ui/skeleton';
-import { useApiResource } from '@/hooks/use-api-resource';
+import {
+  AppText,
+  Card,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  Metric,
+  PageHeader,
+  Pill,
+  Screen,
+  SectionTitle,
+} from '@/components/ui/primitives';
+import { palette, theme } from '@/constants/theme';
+import { useSession } from '@/providers/session-provider';
 import { api } from '@/services/api';
-import { normalizeRepoSchedule } from '@/services/cepreuna-mappers';
-import { findArray, findRecord, pickString } from '@/services/normalizers';
+import type {
+  Contact,
+  ScheduleBlock,
+  ScheduleClass,
+  StudentSchedule,
+  TeacherSchedule,
+} from '@/services/api-types';
+import { periodLabel } from '@/utils/format';
 
-const fallbackDays = [
-  {
-    day: 'Lunes',
-    blocks: [
-      { time: '08:00 - 09:30', course: 'Razonamiento Matematico', teacher: 'Mg. Carlos Quispe', color: '#006CAF' },
-      { time: '10:00 - 11:30', course: 'Comunicacion', teacher: 'Lic. Ana Mamani', color: '#0F7A59' },
-    ],
-  },
-  {
-    day: 'Miercoles',
-    blocks: [
-      { time: '08:00 - 09:30', course: 'Biologia', teacher: 'Dra. Rosa Flores', color: '#BF211E' },
-      { time: '11:40 - 13:00', course: 'Quimica', teacher: 'Dr. Luis Huanca', color: '#7A4E00' },
-    ],
-  },
-  {
-    day: 'Viernes',
-    blocks: [
-      { time: '09:40 - 11:10', course: 'Fisica', teacher: 'Mg. Pedro Ccallo', color: '#4B5FC0' },
-    ],
-  },
+const days = [
+  { id: 1, short: 'Lun', name: 'Lunes' },
+  { id: 2, short: 'Mar', name: 'Martes' },
+  { id: 3, short: 'Mie', name: 'Miercoles' },
+  { id: 4, short: 'Jue', name: 'Jueves' },
+  { id: 5, short: 'Vie', name: 'Viernes' },
 ];
 
 export default function ScheduleScreen() {
-  const [selectedDay, setSelectedDay] = useState('');
-  const loadSchedule = useCallback(() => api.getHorario(), []);
-  const { data, loading, error } = useApiResource(loadSchedule);
-  const apiDays = useMemo(() => {
-    const repoDays = normalizeRepoSchedule(data);
-    return repoDays.length ? repoDays : normalizeSchedule(data);
-  }, [data]);
-  const scheduleMeta = useMemo(() => normalizeScheduleMeta(data), [data]);
-  const days = apiDays.length ? apiDays : fallbackDays;
-  const activeDay = days.find((day) => day.day === selectedDay) ?? days[0];
+  const { role, period } = useSession();
+  const teacher = role === 'docente';
+  const [studentData, setStudentData] = useState<StudentSchedule>();
+  const [teacherData, setTeacherData] = useState<TeacherSchedule>();
+  const [selectedDay, setSelectedDay] = useState(defaultDay());
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!selectedDay && days[0]?.day) {
-      setSelectedDay(days[0].day);
+    void load();
+    // Reload only when the active role changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teacher]);
+
+  async function load(refresh = false) {
+    if (refresh) setRefreshing(true);
+    else setLoading(true);
+    setError('');
+    try {
+      if (teacher) setTeacherData(await api.teacher.schedule());
+      else setStudentData(await api.student.schedule());
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'No se pudo cargar el horario.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-  }, [days, selectedDay]);
+  }
+
+  const selectedName = days.find((day) => day.id === selectedDay)?.name || 'Dia';
+  const studentBlocks = studentData?.dias?.find((day) => day.id === selectedDay)?.bloques ?? [];
+  const teacherClasses = teacherData?.horarios.filter((item) => Number(item.dia) === selectedDay) ?? [];
+  const totalClasses = teacher
+    ? teacherData?.horarios.length ?? 0
+    : studentData?.horarios.length ?? 0;
+  const groupCount = teacher
+    ? new Set(teacherData?.horarios.map((item) => item.grupo_aulas_id).filter(Boolean)).size
+    : studentData?.matricula ? 1 : 0;
 
   return (
-    <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <Text style={styles.kicker}>Horario de clases</Text>
-          <Text style={styles.title}>Grupo A · Area Ingenierias</Text>
-          <View style={styles.headerMeta}>
-            <View style={styles.metaPill}>
-              <MapPin color="#BFE8FF" size={15} />
-              <Text style={styles.metaText}>Grupo {scheduleMeta.group}</Text>
-            </View>
-            <View style={styles.metaPill}>
-              <CalendarDays color="#BFE8FF" size={15} />
-              <Text style={styles.metaText}>Horario vigente</Text>
-            </View>
-          </View>
-        </View>
-        <View style={styles.auxiliaryCard}>
-          <View style={styles.auxiliaryIcon}>
-            <UsersRound color="#00365A" size={22} />
-          </View>
-          <View style={styles.auxiliaryCopy}>
-            <Text style={styles.auxiliaryLabel}>Auxiliar / Tutor</Text>
-            <Text style={styles.auxiliaryName}>{scheduleMeta.auxiliaryName}</Text>
-            <Pressable style={styles.phoneRow} onPress={() => scheduleMeta.auxiliaryPhone && Linking.openURL(`tel:${scheduleMeta.auxiliaryPhone}`)}>
-              <Phone color="#0F7A59" size={14} />
-              <Text style={styles.phoneText}>{scheduleMeta.auxiliaryPhone || 'Celular pendiente'}</Text>
-            </Pressable>
-          </View>
-        </View>
+    <Screen onRefresh={() => load(true)} refreshing={refreshing}>
+      <PageHeader
+        eyebrow="Agenda academica"
+        period={periodLabel(period)}
+        subtitle={teacher
+          ? 'Todas tus cargas del ciclo, ordenadas por dia y hora.'
+          : 'Clases de tu grupo actual, de lunes a viernes.'}
+        title="Horario semanal"
+      />
 
-        {loading ? <ListSkeleton count={3} /> : null}
-        {error ? <Text style={styles.errorText}>Modo demo: {error}</Text> : null}
+      <View style={styles.metricsRow}>
+        <Metric icon={CalendarDays} label="Clases semanales" value={totalClasses} />
+        <Metric icon={UsersRound} label={teacher ? 'Grupos asignados' : 'Grupo activo'} tone="success" value={groupCount} />
+        <Metric
+          icon={Clock3}
+          label={teacher ? 'Clases del dia' : 'Turno'}
+          tone="warning"
+          value={teacher ? teacherClasses.length : studentData?.matricula?.turno || '--'}
+        />
+      </View>
 
-        {(!loading || apiDays.length) && days.length ? (
-          <View style={styles.tabs}>
-            {days.map((day) => (
-              <Pressable key={day.day} style={[styles.tabButton, activeDay?.day === day.day && styles.tabButtonActive]} onPress={() => setSelectedDay(day.day)}>
-                <Text style={[styles.tabText, activeDay?.day === day.day && styles.tabTextActive]}>{shortDay(day.day)}</Text>
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
+      <View style={styles.dayPicker}>
+        {days.map((day) => (
+          <Pressable
+            accessibilityRole="tab"
+            accessibilityState={{ selected: selectedDay === day.id }}
+            key={day.id}
+            onPress={() => setSelectedDay(day.id)}
+            style={({ pressed }) => [
+              styles.dayButton,
+              selectedDay === day.id && styles.dayButtonActive,
+              pressed && styles.pressed,
+            ]}>
+            <AppText color={selectedDay === day.id ? palette.paper : theme.colors.textSoft} variant="micro">
+              {day.short}
+            </AppText>
+            <View style={[styles.dayDot, selectedDay === day.id && styles.dayDotActive]} />
+          </Pressable>
+        ))}
+      </View>
 
-        {activeDay && (!loading || apiDays.length) ? (
-          <View key={activeDay.day} style={styles.dayCard}>
-            <View style={styles.dayHeader}>
-              <CalendarDays color="#00365A" size={20} />
-              <View style={styles.dayTitleCopy}>
-                <Text style={styles.dayTitle}>{activeDay.day}</Text>
-                <Text style={styles.daySubtitle}>{activeDay.blocks.length} bloques de clase</Text>
-              </View>
-            </View>
-            {activeDay.blocks.map((block) => (
-              <View key={`${activeDay.day}-${block.time}-${block.course}`} style={styles.block}>
-                <View style={[styles.blockStripe, { backgroundColor: block.color }]} />
-                <View style={styles.blockContent}>
-                  <View style={styles.timeRow}>
-                    <Clock color="#006CAF" size={15} />
-                    <Text style={styles.timeText}>{block.time}</Text>
-                  </View>
-                  <Text style={styles.course}>{block.course}</Text>
-                  <View style={styles.teacherRow}>
-                    <UserRound color="#687784" size={15} />
-                    <Text style={styles.teacher}>{block.teacher}</Text>
-                  </View>
-                  <Pressable
-                    style={[styles.linkButton, !block.link && styles.linkButtonDisabled]}
-                    onPress={() => block.link && Linking.openURL(block.link)}
-                    disabled={!block.link}>
-                    <LinkIcon color="#ffffff" size={15} />
-                    <Text style={styles.linkText}>{block.link ? 'Unirse a la clase' : 'Sin enlace virtual'}</Text>
-                  </Pressable>
-                </View>
-              </View>
-            ))}
-          </View>
-        ) : null}
-      </ScrollView>
-    </SafeAreaView>
+      <SectionTitle
+        subtitle={`${teacher ? teacherClasses.length : countClasses(studentBlocks)} clases programadas`}
+        title={selectedName}
+      />
+
+      {loading ? <LoadingState label="Organizando tu semana..." /> : null}
+      {error ? <ErrorState message={error} onRetry={() => load()} /> : null}
+      {!loading && !error && teacher && teacherClasses.length === 0 ? (
+        <EmptyState
+          icon={CalendarDays}
+          message="No tienes cargas programadas para este dia."
+          title="Dia libre"
+        />
+      ) : null}
+      {!loading && !error && !teacher && studentBlocks.length === 0 ? (
+        <EmptyState
+          icon={CalendarDays}
+          message="No hay bloques configurados para tu grupo en este dia."
+          title="Sin horario disponible"
+        />
+      ) : null}
+
+      {!loading && !error && teacherClasses.map((item, index) => (
+        <ClassCard index={index} item={item} key={item.id} teacher />
+      ))}
+      {!loading && !error && !teacher && studentBlocks.map((block, index) => (
+        <StudentBlock block={block} index={index} key={`${block.plantilla_id}-${index}`} />
+      ))}
+
+      {!loading && !error ? (
+        <ContactsSection student={studentData} teacher={teacherData} />
+      ) : null}
+    </Screen>
   );
 }
 
-function normalizeScheduleMeta(data: unknown) {
-  const record = findRecord(data);
-  const turnos = findArray(record.horario, ['horario']);
-  const firstTurno = turnos[0] ?? {};
-  const auxiliarGrupo = findRecord(record.auxiliar_grupo, ['auxiliar_grupo']);
-  const auxiliar = findRecord(auxiliarGrupo.auxiliar, ['auxiliar']);
-  const user = findRecord(auxiliar.user, ['user']);
-  const auxiliaryName = [
-    pickString(user, ['paterno'], ''),
-    pickString(user, ['materno'], ''),
-    pickString(user, ['name', 'nombres'], ''),
-  ].filter(Boolean).join(' ');
-
-  return {
-    group: pickString(record, ['grupo'], 'A'),
-    area: pickString(record, ['area'], 'Area academica'),
-    turno: pickString(firstTurno, ['turno'], 'Turno'),
-    auxiliaryName: auxiliaryName || 'Auxiliar asignado',
-    auxiliaryPhone: pickString(auxiliar, ['telefono', 'celular'], ''),
-  };
+function StudentBlock({ block, index }: { block: ScheduleBlock; index: number }) {
+  if (!block.clase) {
+    return (
+      <View style={styles.breakRow}>
+        <View style={styles.timelineColumn}>
+          <View style={styles.breakDot}><Coffee color={theme.colors.warning} size={15} /></View>
+          <View style={styles.timelineLine} />
+        </View>
+        <View style={styles.breakCopy}>
+          <AppText color={theme.colors.textMuted} variant="caption">
+            {block.hora_inicio} - {block.hora_fin}
+          </AppText>
+          <AppText color={theme.colors.warning} variant="label">{block.tipo || 'Receso'}</AppText>
+        </View>
+      </View>
+    );
+  }
+  return (
+    <ClassCard
+      index={index}
+      item={{ ...block.clase, hora_inicio: block.hora_inicio, hora_fin: block.hora_fin }}
+    />
+  );
 }
 
-function shortDay(day: string) {
-  const labels: Record<string, string> = {
-    Lunes: 'Lu',
-    Martes: 'Ma',
-    Miercoles: 'Mi',
-    Jueves: 'Ju',
-    Viernes: 'Vi',
-    Sabado: 'Sa',
-    Domingo: 'Do',
-  };
-  return labels[day] ?? day.slice(0, 2);
+function ClassCard({ item, index, teacher = false }: { item: ScheduleClass; index: number; teacher?: boolean }) {
+  const color = safeCourseColor(item.color, index);
+  return (
+    <View style={styles.classRow}>
+      <View style={styles.timelineColumn}>
+        <View style={[styles.timelineDot, { backgroundColor: color }]} />
+        <View style={styles.timelineLine} />
+      </View>
+      <Card style={styles.classCard}>
+        <View style={styles.classTop}>
+          <Pill icon={Clock3} label={`${item.hora_inicio || '--:--'} - ${item.hora_fin || '--:--'}`} tone="accent" />
+          {item.tipo ? <Pill label={item.tipo} /> : null}
+        </View>
+        <AppText variant="heading">{item.curso}</AppText>
+        <View style={styles.classMeta}>
+          <BookOpenText color={theme.colors.textMuted} size={16} />
+          <AppText color={theme.colors.textSoft} style={styles.metaCopy} variant="caption">
+            {teacher
+              ? [item.grupo ? `Grupo ${item.grupo}` : null, item.turno].filter(Boolean).join(' · ') || 'Carga academica'
+              : item.docente || 'Docente por asignar'}
+          </AppText>
+        </View>
+      </Card>
+    </View>
+  );
 }
 
-function normalizeSchedule(data: unknown) {
-  const rows = findArray(data, ['horarios', 'data', 'items']);
-  const grouped = new Map<string, { time: string; course: string; teacher: string; color: string; link: string }[]>();
+function ContactsSection({ student, teacher }: { student?: StudentSchedule; teacher?: TeacherSchedule }) {
+  const teacherContacts = teacher?.contactos ?? [];
+  const hasContacts = student?.contactos?.coordinador
+    || student?.contactos?.auxiliar
+    || teacherContacts.some((group) => group.coordinador || group.auxiliar);
+  if (!hasContacts) return null;
 
-  rows.forEach((item, index) => {
-    const day = pickString(item, ['dia', 'day', 'fecha'], 'Dia');
-    const start = pickString(item, ['hora_inicio', 'inicio', 'start', 'hora'], '');
-    const end = pickString(item, ['hora_fin', 'fin', 'end'], '');
-    const time = pickString(item, ['horario', 'time'], [start, end].filter(Boolean).join(' - ') || 'Horario por confirmar');
-    const block = {
-      time,
-      course: pickString(item, ['curso', 'asignatura', 'nombre', 'materia'], 'Curso CEPREUNA'),
-      teacher: pickString(item, ['docente', 'profesor', 'teacher'], 'Docente asignado'),
-      color: ['#006CAF', '#0F7A59', '#BF211E', '#7A4E00'][index % 4],
-      link: pickString(item, ['link', 'url'], ''),
-    };
-    grouped.set(day, [...(grouped.get(day) ?? []), block]);
-  });
+  return (
+    <View>
+      <SectionTitle subtitle="Contactos asociados a tus grupos del ciclo" title="Equipo de acompanamiento" />
+      {student?.contactos ? (
+        <View style={styles.contactsGrid}>
+          <ContactCard contact={student.contactos.coordinador} icon={UsersRound} label="Coordinador" />
+          <ContactCard contact={student.contactos.auxiliar} icon={UserRound} label="Auxiliar" />
+        </View>
+      ) : null}
+      {teacherContacts.map((group) => (
+        <Card key={group.grupo_aula_id} style={styles.groupContacts}>
+          <View style={styles.groupTitle}>
+            <MapPinned color={theme.colors.accent} size={18} />
+            <AppText variant="label">Grupo {group.grupo || group.grupo_aula_id}</AppText>
+          </View>
+          <View style={styles.contactsGridInner}>
+            <ContactInline contact={group.coordinador} label="Coordinador" />
+            <ContactInline contact={group.auxiliar} label="Auxiliar" />
+          </View>
+        </Card>
+      ))}
+    </View>
+  );
+}
 
-  return Array.from(grouped.entries()).map(([day, blocks]) => ({ day, blocks }));
+function ContactCard({ contact, icon: Icon, label }: { contact?: Contact | null; icon: typeof UsersRound; label: string }) {
+  return (
+    <Card style={styles.contactCard}>
+      <Icon color={theme.colors.accent} size={21} />
+      <AppText color={theme.colors.textMuted} variant="micro">{label.toUpperCase()}</AppText>
+      <AppText numberOfLines={2} variant="label">{contact?.nombre || 'No asignado'}</AppText>
+      <AppText color={theme.colors.textMuted} variant="caption">{contact?.telefono || 'Sin telefono'}</AppText>
+    </Card>
+  );
+}
+
+function ContactInline({ contact, label }: { contact?: Contact | null; label: string }) {
+  return (
+    <View style={styles.contactInline}>
+      <AppText color={theme.colors.textMuted} variant="micro">{label.toUpperCase()}</AppText>
+      <AppText numberOfLines={1} variant="caption">{contact?.nombre || 'No asignado'}</AppText>
+      {contact?.telefono ? <AppText color={theme.colors.accent} variant="micro">{contact.telefono}</AppText> : null}
+    </View>
+  );
+}
+
+function countClasses(blocks: ScheduleBlock[]) {
+  return blocks.filter((block) => block.clase).length;
+}
+
+function defaultDay() {
+  const jsDay = new Date().getDay();
+  return jsDay >= 1 && jsDay <= 5 ? jsDay : 1;
+}
+
+function safeCourseColor(color: string | null | undefined, index: number) {
+  if (color) {
+    const normalized = color.startsWith('#') ? color : `#${color}`;
+    if (/^#[0-9a-f]{6}$/i.test(normalized)) return normalized;
+  }
+  return [palette.lake600, palette.green700, palette.gold600, palette.violet700][index % 4];
 }
 
 const styles = StyleSheet.create({
-  safeArea: { backgroundColor: '#f3f7fa', flex: 1 },
-  container: { gap: 14, padding: 16, paddingBottom: 86 },
-  header: { backgroundColor: '#00365A', borderRadius: 8, padding: 18 },
-  kicker: { color: '#BFE8FF', fontSize: 12, fontWeight: '900', textTransform: 'uppercase' },
-  title: { color: '#ffffff', fontSize: 27, fontWeight: '900', letterSpacing: 0, lineHeight: 31, marginTop: 4 },
-  headerMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14 },
-  metaPill: { alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 8, flexDirection: 'row', gap: 6, paddingHorizontal: 10, paddingVertical: 8 },
-  metaText: { color: '#ffffff', fontSize: 12, fontWeight: '900' },
-  auxiliaryCard: { alignItems: 'center', backgroundColor: '#ffffff', borderColor: '#e1ebf2', borderRadius: 8, borderWidth: 1, flexDirection: 'row', gap: 12, padding: 14 },
-  auxiliaryIcon: { alignItems: 'center', backgroundColor: '#eef7fc', borderRadius: 8, height: 48, justifyContent: 'center', width: 48 },
-  auxiliaryCopy: { flex: 1 },
-  auxiliaryLabel: { color: '#687784', fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
-  auxiliaryName: { color: '#00365A', fontSize: 15, fontWeight: '900', marginTop: 3 },
-  phoneRow: { alignItems: 'center', alignSelf: 'flex-start', flexDirection: 'row', gap: 5, marginTop: 7 },
-  phoneText: { color: '#0F7A59', fontSize: 12, fontWeight: '900' },
-  tabs: { backgroundColor: '#e8f0f5', borderRadius: 8, flexDirection: 'row', gap: 5, padding: 5 },
-  tabButton: { alignItems: 'center', borderRadius: 7, flex: 1, justifyContent: 'center', minHeight: 40 },
-  tabButtonActive: { backgroundColor: '#00365A', boxShadow: '0px 5px 14px rgba(0, 28, 48, 0.12)' },
-  tabText: { color: '#687784', fontSize: 12, fontWeight: '900' },
-  tabTextActive: { color: '#ffffff' },
-  dayCard: { backgroundColor: '#ffffff', borderColor: '#e1ebf2', borderRadius: 8, borderWidth: 1, gap: 10, padding: 14 },
-  dayHeader: { alignItems: 'center', flexDirection: 'row', gap: 8 },
-  dayTitleCopy: { flex: 1 },
-  dayTitle: { color: '#00365A', fontSize: 20, fontWeight: '900' },
-  daySubtitle: { color: '#687784', fontSize: 12, fontWeight: '700', marginTop: 2 },
-  block: { backgroundColor: '#f9fbfd', borderRadius: 8, flexDirection: 'row', overflow: 'hidden' },
-  blockStripe: { width: 5 },
-  blockContent: { flex: 1, gap: 8, padding: 12 },
-  timeRow: { alignItems: 'center', flexDirection: 'row', gap: 6 },
-  timeText: { color: '#006CAF', fontSize: 12, fontWeight: '900' },
-  course: { color: '#00365A', fontSize: 16, fontWeight: '900' },
-  teacherRow: { alignItems: 'center', flexDirection: 'row', gap: 6 },
-  teacher: { color: '#687784', fontSize: 12, fontWeight: '700' },
-  linkButton: { alignItems: 'center', alignSelf: 'flex-start', backgroundColor: '#00365A', borderRadius: 8, flexDirection: 'row', gap: 6, paddingHorizontal: 10, paddingVertical: 8 },
-  linkButtonDisabled: { backgroundColor: '#8ba0ad' },
-  linkText: { color: '#ffffff', fontSize: 12, fontWeight: '900' },
-  infoText: { backgroundColor: '#eef7fc', borderColor: '#cfe7f5', borderRadius: 8, borderWidth: 1, color: '#365465', fontSize: 12, fontWeight: '800', lineHeight: 18, padding: 10 },
-  errorText: { backgroundColor: '#fff8e8', borderColor: '#f1dfb5', borderRadius: 8, borderWidth: 1, color: '#614918', fontSize: 12, fontWeight: '800', lineHeight: 18, padding: 10 },
+  metricsRow: { flexDirection: 'row', gap: 9, marginHorizontal: 16 },
+  dayPicker: { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: 18, borderWidth: 1, flexDirection: 'row', gap: 4, marginHorizontal: 16, marginTop: 20, padding: 5, ...theme.shadow },
+  dayButton: { alignItems: 'center', borderRadius: 13, flex: 1, gap: 5, justifyContent: 'center', minHeight: 52 },
+  dayButtonActive: { backgroundColor: theme.colors.primary },
+  dayDot: { backgroundColor: theme.colors.borderStrong, borderRadius: 3, height: 4, width: 15 },
+  dayDotActive: { backgroundColor: '#72CFEF' },
+  classRow: { flexDirection: 'row', marginHorizontal: 16 },
+  timelineColumn: { alignItems: 'center', width: 24 },
+  timelineDot: { borderColor: theme.colors.background, borderRadius: 8, borderWidth: 3, height: 16, marginTop: 22, width: 16 },
+  timelineLine: { backgroundColor: theme.colors.borderStrong, flex: 1, width: 2 },
+  classCard: { flex: 1, gap: 10, marginBottom: 12, marginHorizontal: 6 },
+  classTop: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 7, justifyContent: 'space-between' },
+  classMeta: { alignItems: 'center', flexDirection: 'row', gap: 7 },
+  metaCopy: { flex: 1 },
+  breakRow: { flexDirection: 'row', marginHorizontal: 16, minHeight: 72 },
+  breakDot: { alignItems: 'center', backgroundColor: theme.colors.warningSoft, borderRadius: 15, height: 30, justifyContent: 'center', marginTop: 10, width: 30 },
+  breakCopy: { flex: 1, justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 8 },
+  contactsGrid: { flexDirection: 'row', gap: 10, marginHorizontal: 16 },
+  contactCard: { flex: 1, gap: 5, marginHorizontal: 0 },
+  groupContacts: { gap: 12, marginBottom: 10 },
+  groupTitle: { alignItems: 'center', flexDirection: 'row', gap: 8 },
+  contactsGridInner: { flexDirection: 'row', gap: 10 },
+  contactInline: { backgroundColor: theme.colors.surfaceMuted, borderRadius: 13, flex: 1, gap: 3, padding: 10 },
+  pressed: { opacity: 0.7 },
 });

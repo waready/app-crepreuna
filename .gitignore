@@ -33,7 +33,18 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
+.env.*
+!.env.example
 .env*.local
+
+# local browser and export checks
+.chrome-test/
+.edge-test/
+.tmp-*/
+login-*.png
+.expo-*.log
+.proxy*.log
 
 # typescript
 *.tsbuildinfo

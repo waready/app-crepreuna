@@ -1,411 +1,551 @@
-import { BookMarked, ChevronDown, ChevronRight, Download, FileText, LibraryBig, Video } from 'lucide-react-native';
-import { useCallback, useMemo, useState } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  BookOpenText,
+  Building2,
+  Check,
+  ClipboardCheck,
+  ExternalLink,
+  MapPin,
+  Phone,
+  Search,
+  Star,
+  UserRound,
+  UsersRound,
+  Video,
+  X,
+} from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  Alert,
+  FlatList,
+  Linking,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { CardSkeleton, ListSkeleton } from '@/components/ui/skeleton';
-import { useApiResource } from '@/hooks/use-api-resource';
+import { AuthenticatedAvatar } from '@/components/ui/authenticated-avatar';
+import {
+  AppText,
+  Button,
+  Card,
+  Divider,
+  EmptyState,
+  ErrorState,
+  Field,
+  IconButton,
+  LoadingState,
+  Metric,
+  PageHeader,
+  Pill,
+  Screen,
+  SectionTitle,
+} from '@/components/ui/primitives';
+import { palette, theme } from '@/constants/theme';
+import { useSession } from '@/providers/session-provider';
 import { api } from '@/services/api';
-import { normalizeRepoBookletCategories, normalizeRepoTemarios } from '@/services/cepreuna-mappers';
-import { findArray, pickString } from '@/services/normalizers';
-
-type CourseTab = 'mis-cursos' | 'guias' | 'temarios';
-
-const fallbackCourses = [
-  { name: 'Razonamiento Matematico', teacher: 'Mg. Carlos Quispe', progress: 'En curso', color: '#006CAF', link: '', classroom: '', condition: 'Titular' },
-  { name: 'Comunicacion', teacher: 'Lic. Ana Mamani', progress: 'En curso', color: '#0F7A59', link: '', classroom: '', condition: 'Titular' },
-  { name: 'Biologia', teacher: 'Dra. Rosa Flores', progress: 'En curso', color: '#BF211E', link: '', classroom: '', condition: 'Titular' },
-];
-
-const fallbackBookletCategories = [
-  {
-    denominacion: 'General',
-    color: '#006CAF',
-    semanas: [
-      { semana: '01', cuadernillos: [{ id: '1', nombre: 'Introduccion y diagnostico', descripcion: '', archivoUrl: '', fecha: '' }] },
-      { semana: '02', cuadernillos: [{ id: '2', nombre: 'Practica dirigida', descripcion: '', archivoUrl: '', fecha: '' }] },
-      { semana: '03', cuadernillos: [{ id: '3', nombre: 'Banco de ejercicios', descripcion: '', archivoUrl: '', fecha: '' }] },
-    ],
-  },
-];
-
-
-const fallbackTemarios = normalizeTemariosFallback({
-  temarios: [
-    { id: 24, area: 'Ingenierias', curso: 'Aritmetica', color: '#A8D7F9', base_path: 'https://sistemas.cepreuna.edu.pe', temarios: { path: '03-2026/Temario-20260321_163212qurD.pdf', id: 16 } },
-    { id: 25, area: 'Ingenierias', curso: 'Algebra', color: '#C8EDFF', base_path: 'https://sistemas.cepreuna.edu.pe', temarios: { path: '03-2026/Temario-20260321_163358cnD6.pdf', id: 17 } },
-    { id: 26, area: 'Ingenierias', curso: 'Geometria', color: '#E8C4C4', base_path: 'https://sistemas.cepreuna.edu.pe', temarios: { path: '03-2026/Temario-20260321_163459rCsT.pdf', id: 18 } },
-    { id: 27, area: 'Ingenierias', curso: 'Trigonometria', color: '#EADA19', base_path: 'https://sistemas.cepreuna.edu.pe', temarios: { path: '03-2026/Temario-20260321_163540RqN6.pdf', id: 19 } },
-    { id: 9, area: 'Ingenierias', curso: 'Fisica', color: '#80cbc4', base_path: 'https://sistemas.cepreuna.edu.pe', temarios: { path: '03-2026/Temario-20260321_163616WElT.pdf', id: 20 } },
-    { id: 10, area: 'Ingenierias', curso: 'Quimica', color: '#dcedc8', base_path: 'https://sistemas.cepreuna.edu.pe', temarios: { path: '03-2026/Temario-20260321_1637021JG6.pdf', id: 21 } },
-    { id: 32, area: 'Ingenierias', curso: 'Biologia y Anatomia', color: '#19EA85', base_path: 'https://sistemas.cepreuna.edu.pe', temarios: { path: '03-2026/Temario-20260321_163727Q3Ly.pdf', id: 22 } },
-    { id: 7, area: 'Ingenierias', curso: 'Psicologia y Filosofia', color: '#f8bbd0', base_path: 'https://sistemas.cepreuna.edu.pe', temarios: { path: '03-2026/Temario-20260321_163752xALT.pdf', id: 23 } },
-    { id: 21, area: 'Ingenierias', curso: 'Educacion Civica', color: '#e1bee7', base_path: 'https://sistemas.cepreuna.edu.pe', temarios: { path: '03-2026/Temario-20260321_163901y7Tw.pdf', id: 24 } },
-    { id: 8, area: 'Ingenierias', curso: 'Economia', color: '#c5cae9', base_path: 'https://sistemas.cepreuna.edu.pe', temarios: { path: '03-2026/Temario-20260321_164042YUAy.pdf', id: 25 } },
-    { id: 29, area: 'Ingenierias', curso: 'Comunicacion y Literatura', color: '#BEC6F7', base_path: 'https://sistemas.cepreuna.edu.pe', temarios: { path: '03-2026/Temario-20260321_164143OCJ4.pdf', id: 26 } },
-    { id: 12, area: 'Ingenierias', curso: 'Razonamiento Matematico', color: '#d7ccc8', base_path: 'https://sistemas.cepreuna.edu.pe', temarios: { path: '03-2026/Temario-20260321_1642050vPV.pdf', id: 27 } },
-    { id: 11, area: 'Ingenierias', curso: 'Razonamiento Verbal', color: '#ffe082', base_path: 'https://sistemas.cepreuna.edu.pe', temarios: { path: '03-2026/Temario-20260323_091131brPB.pdf', id: 45 } },
-    { id: 36, area: 'Ingenierias', curso: 'Historia y Geografia', color: '#F99F3B', base_path: 'https://sistemas.cepreuna.edu.pe', temarios: { path: '03-2026/Temario-20260321_164232zxjT.pdf', id: 28 } },
-  ],
-});
+import type {
+  CourseCriterion,
+  StudentCourse,
+  TeacherCourse,
+  TeacherStudent,
+} from '@/services/api-types';
+import { periodLabel } from '@/utils/format';
 
 export default function CoursesScreen() {
-  const [tab, setTab] = useState<CourseTab>('mis-cursos');
-  const [expandedCourse, setExpandedCourse] = useState<string | null>(null);
-  const loadCourses = useCallback(() => api.getCarga(), []);
-  const loadBooklets = useCallback(() => api.getCuadernillos(), []);
-  const loadTemarios = useCallback(() => api.getTemarios(), []);
-  const coursesResource = useApiResource(loadCourses);
-  const bookletsResource = useApiResource(loadBooklets);
-  const temariosResource = useApiResource(loadTemarios, tab === 'temarios');
-  const apiCourses = useMemo(() => normalizeCourses(coursesResource.data), [coursesResource.data]);
-  const apiBooklets = useMemo(() => normalizeRepoBookletCategories(bookletsResource.data), [bookletsResource.data]);
-  const apiTemarios = useMemo(() => normalizeRepoTemarios(temariosResource.data), [temariosResource.data]);
-  const courses = apiCourses.length ? apiCourses : fallbackCourses;
-  const bookletCategories = apiBooklets.length ? apiBooklets : fallbackBookletCategories;
-  const temarios = apiTemarios.length ? apiTemarios : fallbackTemarios;
+  const { role, period } = useSession();
+  const [studentCourses, setStudentCourses] = useState<StudentCourse[]>([]);
+  const [teacherCourses, setTeacherCourses] = useState<TeacherCourse[]>([]);
+  const [query, setQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState('');
+  const [selectedStudentCourse, setSelectedStudentCourse] = useState<StudentCourse>();
+  const [selectedTeacherCourse, setSelectedTeacherCourse] = useState<TeacherCourse>();
 
-  return (
-    <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <Text style={styles.kicker}>Academico</Text>
-          <Text style={styles.title}>Cursos</Text>
-          <Text style={styles.subtitle}>Mis cursos, guias de aprendizaje y temarios conectados a tu carga academica.</Text>
-        </View>
+  const teacher = role === 'docente';
 
-        <View style={styles.tabsCard}>
-          <View style={styles.menuTitleRow}>
-            <LibraryBig color="#F27A1A" size={22} />
-            <Text style={styles.menuTitle}>Cursos</Text>
-          </View>
-          <View style={styles.tabs}>
-            <TabButton active={tab === 'mis-cursos'} label="Mis Cursos" onPress={() => setTab('mis-cursos')} />
-            <TabButton active={tab === 'guias'} label="Guias" onPress={() => setTab('guias')} />
-            <TabButton active={tab === 'temarios'} label="Temarios" onPress={() => setTab('temarios')} />
-          </View>
-        </View>
+  useEffect(() => {
+    void load();
+    // Reload only when the active role changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teacher]);
 
-        {coursesResource.error ? <Text style={styles.errorText}>Modo demo: {coursesResource.error}</Text> : null}
-        {tab === 'mis-cursos' ? (
-          <>
-            <SectionTitle title="Mis cursos" action={coursesResource.loading ? 'Cargando...' : 'Actualizar'} />
-            <View style={styles.courseList}>
-              {coursesResource.loading && !apiCourses.length ? <ListSkeleton count={2} /> : null}
-              {(!coursesResource.loading || apiCourses.length ? courses : []).map((course) => (
-                <CourseCard
-                  key={course.name}
-                  course={course}
-                  expanded={expandedCourse === course.name}
-                  onToggle={() => setExpandedCourse((current) => current === course.name ? null : course.name)}
-                />
-              ))}
-            </View>
-          </>
-        ) : null}
-
-        {tab === 'temarios' ? (
-          <>
-            <SectionTitle title="Temarios" action={temariosResource.loading && !apiTemarios.length ? 'Cargando...' : `${temarios.length} archivos`} />
-            {temariosResource.error && !apiTemarios.length ? <Text style={styles.infoText}>Vista previa con datos de ejemplo. Cuando el backend exponga /api/temarios, se reemplazara automaticamente.</Text> : null}
-            <View style={styles.resourceList}>
-              {temariosResource.loading && !apiTemarios.length ? <ListSkeleton count={3} /> : null}
-              {temarios.map((temario) => (
-                <ResourceCard
-                  key={`${temario.courseId}-${temario.id}`}
-                  color={temario.color}
-                  icon="topic"
-                  title={temario.course}
-                  subtitle={`${temario.area} ? Temario PDF`}
-                  actionLabel={temario.archivoUrl ? 'Abrir PDF' : 'Sin PDF'}
-                  onPress={temario.archivoUrl ? () => Linking.openURL(temario.archivoUrl) : undefined}
-                />
-              ))}
-            </View>
-          </>
-        ) : null}
-
-        {tab === 'guias' ? <SectionTitle title="Guias de aprendizaje" action={bookletsResource.loading ? 'Cargando...' : `${bookletCategories.length} cursos`} /> : null}
-        {tab === 'guias' && bookletsResource.error ? <Text style={styles.errorText}>Modo demo: {bookletsResource.error}</Text> : null}
-        {tab === 'guias' ? <View style={styles.bookletList}>
-          {bookletsResource.loading && !apiBooklets.length ? (
-            <>
-              <CardSkeleton rows={3} />
-              <CardSkeleton rows={3} />
-            </>
-          ) : null}
-          {(!bookletsResource.loading || apiBooklets.length ? bookletCategories : []).map((category) => (
-            <View key={category.denominacion} style={[styles.categoryCard, { borderLeftColor: category.color }]}>
-              <View style={styles.categoryHeader}>
-                <Text style={styles.categoryTitle}>{category.denominacion}</Text>
-                <Text style={styles.categoryCount}>{category.semanas.length} semanas</Text>
-              </View>
-              {category.semanas.slice(0, 5).map((week) => {
-                const firstBooklet = week.cuadernillos[0];
-                return (
-                  <Pressable
-                    key={`${category.denominacion}-${week.semana}`}
-                    style={styles.bookletItem}
-                    onPress={() => firstBooklet?.archivoUrl && Linking.openURL(firstBooklet.archivoUrl)}>
-                    <View style={styles.bookletIcon}>
-                      <FileText color="#00365A" size={22} />
-                    </View>
-                    <View style={styles.bookletCopy}>
-                      <Text style={styles.bookletWeek}>Semana {week.semana}</Text>
-                      <Text style={styles.bookletTitle}>{firstBooklet?.nombre ?? `Guia semana ${week.semana}`}</Text>
-                      <Text style={styles.bookletArea}>{week.cuadernillos.length} archivo(s)</Text>
-                    </View>
-                    <View style={styles.downloadButton}>
-                      <Download color="#ffffff" size={18} />
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
-          ))}
-        </View> : null}
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
-
-
-function normalizeTemariosFallback(data: unknown) {
-  const rows = data && typeof data === 'object' && Array.isArray((data as { temarios?: unknown }).temarios)
-    ? ((data as { temarios: Record<string, unknown>[] }).temarios)
-    : [];
-
-  return rows.map((item) => {
-    const temario = item.temarios && typeof item.temarios === 'object' ? (item.temarios as Record<string, unknown>) : {};
-    const basePath = pickString(item, ['base_path'], 'https://sistemas.cepreuna.edu.pe');
-    const path = pickString(temario, ['path'], '');
-    return {
-      id: pickString(temario, ['id'], pickString(item, ['id'], '0')),
-      courseId: pickString(item, ['id'], '0'),
-      area: pickString(item, ['area'], 'Area academica'),
-      course: pickString(item, ['curso'], 'Curso CEPREUNA'),
-      color: pickString(item, ['color'], '#006CAF'),
-      archivoUrl: path ? `${basePath.replace(/\/+$/, '')}/storage/documentos/${path.replace(/^\/+/, '')}` : '',
-    };
-  });
-}
-
-function normalizeCourses(data: unknown) {
-  const seen = new Set<string>();
-
-  return findArray(data, ['carga', 'cargas', 'cursos', 'mis_cursos', 'data']).map((item, index) => {
-    const curso = item.curso && typeof item.curso === 'object' ? (item.curso as Record<string, unknown>) : item;
-    const docente = item.docente && typeof item.docente === 'object' ? (item.docente as Record<string, unknown>) : {};
-    const docenteNombre = [
-      pickString(docente, ['paterno'], ''),
-      pickString(docente, ['materno'], ''),
-      pickString(docente, ['nombres', 'name'], ''),
-    ].filter(Boolean).join(' ');
-    const name = pickString(curso, ['denominacion', 'curso', 'nombre', 'asignatura'], 'Curso CEPREUNA');
-    const key = `${name}-${docenteNombre}-${pickString(item, ['idclassroom'], '')}`;
-    if (seen.has(key)) {
-      return null;
+  async function load(refresh = false) {
+    if (refresh) setRefreshing(true);
+    else setLoading(true);
+    setError('');
+    try {
+      if (teacher) setTeacherCourses(await api.teacher.courses());
+      else setStudentCourses(await api.student.courses());
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'No se pudieron cargar los cursos.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-    seen.add(key);
+  }
 
-    return {
-      name,
-      teacher: docenteNombre || pickString(item, ['profesor', 'teacher'], 'Docente asignado'),
-      progress: pickString(item, ['estado_label', 'progress', 'situacion'], pickString(item, ['estado'], 'En curso') === '1' ? 'En curso' : 'Disponible'),
-      color: pickString(curso, ['color'], ['#006CAF', '#0F7A59', '#BF211E', '#7A4E00'][index % 4]),
-      link: pickString(item, ['link', 'url'], ''),
-      classroom: pickString(item, ['idclassroom'], ''),
-      condition: pickString(docente, ['condicion'], 'Titular'),
-    };
-  }).filter((course): course is NonNullable<typeof course> => Boolean(course));
-}
+  const search = query.trim().toLowerCase();
+  const filteredStudent = studentCourses.filter((course) =>
+    [course.curso, course.docente, course.grupo].some((value) => value?.toLowerCase().includes(search))
+  );
+  const filteredTeacher = teacherCourses.filter((course) =>
+    [course.curso, course.grupo, course.modalidad, course.sede].some((value) => value?.toLowerCase().includes(search))
+  );
+  const presencial = teacherCourses.filter((course) => course.modalidad.toLowerCase() === 'presencial').length;
+  const virtual = teacherCourses.filter((course) => course.modalidad.toLowerCase() === 'virtual').length;
 
-
-function CourseCard({
-  course,
-  expanded,
-  onToggle,
-}: {
-  course: ReturnType<typeof normalizeCourses>[number];
-  expanded: boolean;
-  onToggle: () => void;
-}) {
   return (
-    <View style={styles.accordionCard}>
-      <Pressable style={styles.accordionHeader} onPress={onToggle}>
-        <View style={[styles.bookmark, { backgroundColor: course.color }]} />
-        <Text style={styles.accordionTitle}>{course.name}</Text>
-        <ChevronDown color="#45525d" size={18} style={expanded ? styles.chevronOpen : undefined} />
-      </Pressable>
-      {expanded ? (
-        <View style={styles.accordionBody}>
-          <InfoLine label="Docente" value={course.teacher} />
-          <InfoLine label="Condicion" value={course.condition} />
-          <View style={styles.actionLine}>
-            <Text style={styles.infoLabel}>Meet:</Text>
-            <Pressable
-              style={[styles.meetButton, !course.link && styles.meetButtonDisabled]}
-              onPress={() => course.link && Linking.openURL(course.link)}
-              disabled={!course.link}>
-              <Video color="#ffffff" size={14} />
-              <Text style={styles.meetText}>{course.link ? 'Ir a Meet' : 'Sin enlace'}</Text>
-            </Pressable>
+    <Screen contentStyle={styles.screen} scroll={false}>
+      <FlatList<StudentCourse | TeacherCourse>
+        ListEmptyComponent={!loading && !error ? (
+          <EmptyState
+            icon={BookOpenText}
+            message={search ? 'Prueba con otro nombre, grupo o docente.' : 'No existen cargas asignadas en el ciclo activo.'}
+            title={search ? 'No encontramos coincidencias' : 'Sin cursos disponibles'}
+          />
+        ) : null}
+        ListFooterComponent={<View style={styles.footerSpace} />}
+        ListHeaderComponent={(
+          <View>
+            <PageHeader
+              eyebrow={teacher ? 'Docencia' : 'Formacion academica'}
+              period={periodLabel(period)}
+              subtitle={teacher
+                ? 'Distingue cada modalidad y consulta a tu equipo de grupo.'
+                : 'Tus cursos, docentes y accesos del ciclo vigente.'}
+              title="Mis cursos"
+            />
+            {teacher ? (
+              <View style={styles.metricsRow}>
+                <Metric icon={BookOpenText} label="Cargas activas" value={teacherCourses.length} />
+                <Metric icon={Building2} label="Presenciales" tone="success" value={presencial} />
+                <Metric icon={Video} label="Virtuales" tone="info" value={virtual} />
+              </View>
+            ) : null}
+            <View style={styles.searchWrap}>
+              <Field
+                icon={Search}
+                onChangeText={setQuery}
+                placeholder="Buscar curso, grupo o docente"
+                value={query}
+              />
+            </View>
+            <SectionTitle
+              subtitle={`${teacher ? filteredTeacher.length : filteredStudent.length} resultados del ciclo`}
+              title={teacher ? 'Cargas academicas' : 'Cursos matriculados'}
+            />
+            {loading ? <LoadingState label="Consultando cargas academicas..." /> : null}
+            {error ? <ErrorState message={error} onRetry={() => load()} /> : null}
           </View>
-          <InfoLine label="Encuesta" value={course.classroom ? `Classroom ${course.classroom}` : 'Pendiente'} />
+        )}
+        contentContainerStyle={styles.listContent}
+        data={loading || error ? [] : teacher ? filteredTeacher : filteredStudent}
+        keyExtractor={(item) => String(item.id)}
+        onRefresh={() => load(true)}
+        refreshing={refreshing}
+        renderItem={({ item }) => teacher
+          ? <TeacherCourseCard course={item as TeacherCourse} onOpen={() => setSelectedTeacherCourse(item as TeacherCourse)} />
+          : <StudentCourseCard course={item as StudentCourse} onSurvey={() => setSelectedStudentCourse(item as StudentCourse)} />}
+        showsVerticalScrollIndicator={false}
+      />
+
+      <SurveyModal
+        course={selectedStudentCourse}
+        onClose={() => setSelectedStudentCourse(undefined)}
+        onCompleted={() => {
+          setSelectedStudentCourse(undefined);
+          void load();
+        }}
+      />
+      <TeacherCourseModal
+        course={selectedTeacherCourse}
+        onClose={() => setSelectedTeacherCourse(undefined)}
+        onUpdated={() => void load()}
+      />
+    </Screen>
+  );
+}
+
+function StudentCourseCard({ course, onSurvey }: { course: StudentCourse; onSurvey: () => void }) {
+  const color = safeCourseColor(course.color);
+  const surveyAvailable = course.encuesta_habilitada && !course.encuesta_realizada;
+  return (
+    <Card style={styles.courseCard}>
+      <View style={[styles.courseAccent, { backgroundColor: color }]} />
+      <View style={styles.courseHeader}>
+        <View style={[styles.courseIcon, { backgroundColor: `${color}1A` }]}>
+          <BookOpenText color={color} size={22} />
         </View>
-      ) : null}
+        <View style={styles.courseHeading}>
+          <AppText variant="heading">{course.curso}</AppText>
+          <View style={styles.pillRow}>
+            {course.grupo ? <Pill label={`Grupo ${course.grupo}`} /> : null}
+            {course.tipo ? <Pill label={course.tipo} tone="accent" /> : null}
+          </View>
+        </View>
+      </View>
+      <View style={styles.teacherRow}>
+        <AuthenticatedAvatar name={course.docente || 'Docente por asignar'} size={42} />
+        <View style={styles.teacherCopy}>
+          <AppText color={theme.colors.textMuted} variant="micro">DOCENTE</AppText>
+          <AppText numberOfLines={2} variant="label">{course.docente || 'Por asignar'}</AppText>
+        </View>
+      </View>
+      <View style={styles.courseActions}>
+        {course.meet_url ? (
+          <Button compact icon={Video} label="Abrir Meet" onPress={() => void openUrl(course.meet_url)} variant="secondary" />
+        ) : <Pill label="Meet no registrado" tone="neutral" />}
+        {surveyAvailable ? (
+          <Button compact icon={ClipboardCheck} label="Evaluar" onPress={onSurvey} />
+        ) : course.encuesta_realizada ? (
+          <Pill icon={Check} label="Evaluacion enviada" tone="success" />
+        ) : null}
+      </View>
+    </Card>
+  );
+}
+
+function TeacherCourseCard({ course, onOpen }: { course: TeacherCourse; onOpen: () => void }) {
+  const virtual = course.modalidad.toLowerCase() === 'virtual';
+  const color = safeCourseColor(course.color);
+  return (
+    <Card accessibilityLabel={`Abrir ${course.curso} ${course.grupo ?? ''}`} onPress={onOpen} style={styles.courseCard}>
+      <View style={[styles.courseAccent, { backgroundColor: virtual ? theme.colors.info : theme.colors.success }]} />
+      <View style={styles.teacherCourseTop}>
+        <View style={[styles.courseIcon, { backgroundColor: `${color}1A` }]}>
+          <BookOpenText color={color} size={22} />
+        </View>
+        <View style={styles.courseHeading}>
+          <AppText variant="heading">{course.curso}</AppText>
+          <AppText color={theme.colors.textMuted} variant="caption">
+            {course.grupo ? `Grupo ${course.grupo}` : 'Grupo no indicado'}
+          </AppText>
+        </View>
+        <Pill
+          icon={virtual ? Video : Building2}
+          label={course.modalidad}
+          tone={virtual ? 'info' : 'success'}
+        />
+      </View>
+      <View style={styles.locationRow}>
+        <MapPin color={theme.colors.textMuted} size={17} />
+        <AppText color={theme.colors.textSoft} style={styles.locationCopy} variant="caption">
+          {[course.sede, course.local, course.aula ? `Aula ${course.aula}` : null].filter(Boolean).join(' · ') || 'Ubicacion por confirmar'}
+        </AppText>
+      </View>
+      <Divider />
+      <View style={styles.contactSummary}>
+        <ContactMini icon={UsersRound} label="Coordinador" value={course.coordinador?.nombre} />
+        <ContactMini icon={UserRound} label="Auxiliar" value={course.auxiliar?.nombre} />
+      </View>
+      <View style={styles.openHint}>
+        <AppText color={theme.colors.accent} variant="label">Ver detalles y estudiantes</AppText>
+        <ExternalLink color={theme.colors.accent} size={17} />
+      </View>
+    </Card>
+  );
+}
+
+function ContactMini({ icon: Icon, label, value }: { icon: typeof UsersRound; label: string; value?: string | null }) {
+  return (
+    <View style={styles.contactMini}>
+      <Icon color={theme.colors.accent} size={17} />
+      <View style={styles.contactMiniCopy}>
+        <AppText color={theme.colors.textMuted} variant="micro">{label.toUpperCase()}</AppText>
+        <AppText numberOfLines={1} variant="caption">{value || 'No asignado'}</AppText>
+      </View>
     </View>
   );
 }
 
-function InfoLine({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.infoLine}>
-      <Text style={styles.infoLabel}>{label}:</Text>
-      <Text style={styles.infoValue}>{value}</Text>
-    </View>
-  );
-}
-
-
-function TabButton({ active, label, onPress }: { active: boolean; label: string; onPress: () => void }) {
-  return (
-    <Pressable onPress={onPress} style={[styles.tabButton, active && styles.tabButtonActive]}>
-      <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function ResourceCard({
-  color,
-  icon,
-  title,
-  subtitle,
-  actionLabel,
-  onPress,
+function SurveyModal({
+  course,
+  onClose,
+  onCompleted,
 }: {
-  color: string;
-  icon: 'guide' | 'topic';
-  title: string;
-  subtitle: string;
-  actionLabel: string;
-  onPress?: () => void;
+  course?: StudentCourse;
+  onClose: () => void;
+  onCompleted: () => void;
 }) {
-  const Icon = icon === 'guide' ? BookMarked : FileText;
+  const [criteria, setCriteria] = useState<CourseCriterion[]>([]);
+  const [scores, setScores] = useState<Record<number, number>>({});
+  const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!course) return;
+    setScores({});
+    setLoading(true);
+    setError('');
+    api.student.criteria(course.id)
+      .then(setCriteria)
+      .catch((caught) => setError(caught instanceof Error ? caught.message : 'No se pudo cargar la evaluacion.'))
+      .finally(() => setLoading(false));
+  }, [course]);
+
+  async function submit() {
+    if (!course) return;
+    if (criteria.some((criterion) => !scores[criterion.id])) {
+      setError('Responde todos los criterios antes de enviar.');
+      return;
+    }
+    setSending(true);
+    try {
+      await api.student.rateTeacher(course.id, criteria.map((criterion) => ({
+        criterio_id: criterion.id,
+        puntaje: scores[criterion.id],
+      })));
+      Alert.alert('Evaluacion enviada', 'Gracias por completar todos los criterios.');
+      onCompleted();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'No se pudo guardar la evaluacion.');
+    } finally {
+      setSending(false);
+    }
+  }
 
   return (
-    <Pressable style={styles.resourceCard} onPress={onPress} disabled={!onPress}>
-      <View style={[styles.resourceIcon, { backgroundColor: `${color}33` }]}>
-        <Icon color={color} size={22} />
+    <Modal animationType="slide" onRequestClose={onClose} transparent visible={Boolean(course)}>
+      <View style={styles.modalScrim}>
+        <SafeAreaView edges={['bottom']} style={styles.modalSheet}>
+          <View style={styles.modalHandle} />
+          <View style={styles.modalTitleRow}>
+            <View style={styles.modalTitleCopy}>
+              <AppText variant="title">Evaluar docente</AppText>
+              <AppText color={theme.colors.textMuted} variant="caption">{course?.curso} · {course?.docente}</AppText>
+            </View>
+            <IconButton accessibilityLabel="Cerrar" icon={X} onPress={onClose} />
+          </View>
+          {loading ? <LoadingState label="Cargando criterios..." /> : null}
+          <ScrollView contentContainerStyle={styles.modalScroll} showsVerticalScrollIndicator={false}>
+            {criteria.map((criterion, index) => (
+              <View key={criterion.id} style={styles.criterion}>
+                <AppText variant="label">{index + 1}. {criterion.denominacion}</AppText>
+                <View style={styles.stars}>
+                  {[1, 2, 3, 4, 5].map((score) => {
+                    const active = score <= (scores[criterion.id] || 0);
+                    return (
+                      <Pressable
+                        accessibilityLabel={`${score} estrellas`}
+                        key={score}
+                        onPress={() => setScores((current) => ({ ...current, [criterion.id]: score }))}
+                        style={styles.starButton}>
+                        <Star
+                          color={active ? theme.colors.warning : theme.colors.borderStrong}
+                          fill={active ? theme.colors.warning : 'transparent'}
+                          size={27}
+                        />
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            ))}
+            {error ? <AppText color={theme.colors.danger} style={styles.modalError} variant="caption">{error}</AppText> : null}
+            {!loading ? (
+              <Button fullWidth label="Enviar evaluacion" loading={sending} onPress={submit} />
+            ) : null}
+          </ScrollView>
+        </SafeAreaView>
       </View>
-      <View style={styles.resourceCopy}>
-        <Text style={styles.resourceTitle}>{title}</Text>
-        <Text style={styles.resourceText}>{subtitle}</Text>
-      </View>
-      <View style={[styles.resourceAction, !onPress && styles.resourceActionDisabled]}>
-        <Text style={styles.resourceActionText}>{actionLabel}</Text>
-        <ChevronRight color="#ffffff" size={15} />
-      </View>
-    </Pressable>
+    </Modal>
   );
 }
 
-function SectionTitle({ title, action }: { title: string; action?: string }) {
+function TeacherCourseModal({
+  course,
+  onClose,
+  onUpdated,
+}: {
+  course?: TeacherCourse;
+  onClose: () => void;
+  onUpdated: () => void;
+}) {
+  const { height } = useWindowDimensions();
+  const [meet, setMeet] = useState('');
+  const [students, setStudents] = useState<TeacherStudent[]>([]);
+  const [loadingStudents, setLoadingStudents] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setMeet(course?.meet_url || '');
+    setStudents([]);
+    setError('');
+  }, [course]);
+
+  async function loadStudents() {
+    if (!course || loadingStudents) return;
+    setLoadingStudents(true);
+    setError('');
+    try {
+      setStudents(await api.teacher.students(course.id));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'No se pudo cargar la lista.');
+    } finally {
+      setLoadingStudents(false);
+    }
+  }
+
+  async function saveMeet() {
+    if (!course || !/^https?:\/\//i.test(meet.trim())) {
+      setError('Ingresa un enlace completo que empiece con http:// o https://.');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      await api.teacher.updateMeet(course.id, meet.trim());
+      Alert.alert('Meet actualizado', 'El enlace ya esta disponible para tus estudiantes.');
+      onUpdated();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'No se pudo actualizar Meet.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!course) return null;
+  const virtual = course.modalidad.toLowerCase() === 'virtual';
+
   return (
-    <View style={styles.sectionHeader}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {action ? <Text style={styles.sectionAction}>{action}</Text> : null}
-    </View>
+    <Modal animationType="slide" onRequestClose={onClose} transparent visible>
+      <View style={styles.modalScrim}>
+        <SafeAreaView edges={['bottom']} style={[styles.modalSheet, { maxHeight: height * 0.9 }]}>
+          <View style={styles.modalHandle} />
+          <View style={styles.modalTitleRow}>
+            <View style={styles.modalTitleCopy}>
+              <Pill icon={virtual ? Video : Building2} label={course.modalidad} tone={virtual ? 'info' : 'success'} />
+              <AppText variant="title">{course.curso}</AppText>
+              <AppText color={theme.colors.textMuted} variant="caption">Grupo {course.grupo || 'sin asignar'}</AppText>
+            </View>
+            <IconButton accessibilityLabel="Cerrar" icon={X} onPress={onClose} />
+          </View>
+          <ScrollView contentContainerStyle={styles.modalScroll} showsVerticalScrollIndicator={false}>
+            <Card style={styles.locationCard}>
+              <MapPin color={theme.colors.accent} size={21} />
+              <View style={styles.locationCopy}>
+                <AppText variant="label">{course.sede || course.local || 'Ubicacion por confirmar'}</AppText>
+                <AppText color={theme.colors.textMuted} variant="caption">
+                  {[course.direccion, course.aula ? `Aula ${course.aula}` : null].filter(Boolean).join(' · ') || 'Sin direccion registrada'}
+                </AppText>
+              </View>
+            </Card>
+
+            <SectionTitle title="Equipo del grupo" />
+            <ContactCard contact={course.coordinador} label="Coordinador" />
+            <ContactCard contact={course.auxiliar} label="Auxiliar" />
+
+            <SectionTitle subtitle="El cambio se refleja para tus estudiantes" title="Enlace de clase" />
+            <Field icon={Video} label="URL de Google Meet" onChangeText={setMeet} placeholder="https://meet.google.com/..." value={meet} />
+            <View style={styles.inlineActions}>
+              {course.meet_url ? <Button compact icon={ExternalLink} label="Abrir" onPress={() => void openUrl(course.meet_url)} variant="secondary" /> : null}
+              <Button compact icon={Check} label="Guardar Meet" loading={saving} onPress={saveMeet} />
+            </View>
+
+            <SectionTitle
+              action={<Button compact icon={UsersRound} label={students.length ? 'Actualizar' : 'Ver lista'} loading={loadingStudents} onPress={loadStudents} variant="soft" />}
+              subtitle="Solo estudiantes matriculados en este grupo"
+              title="Estudiantes"
+            />
+            {students.map((student, index) => (
+              <View key={student.id} style={styles.studentRow}>
+                <View style={styles.studentNumber}>
+                  <AppText color={theme.colors.primary} variant="micro">{index + 1}</AppText>
+                </View>
+                <View style={styles.studentCopy}>
+                  <AppText variant="label">{student.nombre_completo}</AppText>
+                  <AppText color={theme.colors.textMuted} variant="micro">{student.nro_documento || student.usuario || 'Sin documento'}</AppText>
+                </View>
+              </View>
+            ))}
+            {error ? <AppText color={theme.colors.danger} style={styles.modalError} variant="caption">{error}</AppText> : null}
+          </ScrollView>
+        </SafeAreaView>
+      </View>
+    </Modal>
   );
+}
+
+function ContactCard({ contact, label }: { contact?: TeacherCourse['coordinador']; label: string }) {
+  return (
+    <Card style={styles.contactCard}>
+      <View style={styles.contactAvatar}>
+        {label === 'Coordinador'
+          ? <UsersRound color={theme.colors.primary} size={21} />
+          : <UserRound color={theme.colors.primary} size={21} />}
+      </View>
+      <View style={styles.contactCardCopy}>
+        <AppText color={theme.colors.textMuted} variant="micro">{label.toUpperCase()}</AppText>
+        <AppText variant="label">{contact?.nombre || 'No asignado'}</AppText>
+        <AppText color={theme.colors.textMuted} variant="caption">{contact?.telefono || 'Telefono no registrado'}</AppText>
+      </View>
+      {contact?.telefono ? (
+        <IconButton accessibilityLabel={`Llamar a ${label}`} icon={Phone} onPress={() => void Linking.openURL(`tel:${contact.telefono}`)} />
+      ) : null}
+    </Card>
+  );
+}
+
+async function openUrl(url?: string | null) {
+  if (!url) return;
+  try {
+    await Linking.openURL(url);
+  } catch {
+    Alert.alert('Enlace no disponible', 'No se pudo abrir este enlace.');
+  }
+}
+
+function safeCourseColor(color?: string | null) {
+  if (!color) return theme.colors.accent;
+  const normalized = color.startsWith('#') ? color : `#${color}`;
+  return /^#[0-9a-f]{6}$/i.test(normalized) ? normalized : theme.colors.accent;
 }
 
 const styles = StyleSheet.create({
-  safeArea: { backgroundColor: '#f3f7fa', flex: 1 },
-  container: { gap: 14, padding: 16, paddingBottom: 86 },
-  header: {
-    backgroundColor: '#00365A',
-    borderRadius: 8,
-    padding: 18,
-  },
-  kicker: { color: '#BFE8FF', fontSize: 12, fontWeight: '900', textTransform: 'uppercase' },
-  title: { color: '#ffffff', fontSize: 29, fontWeight: '900', letterSpacing: 0, lineHeight: 32, marginTop: 4 },
-  subtitle: { color: '#d9ebf5', fontSize: 13, lineHeight: 20, marginTop: 7 },
-  sectionHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 },
-  sectionTitle: { color: '#00365A', fontSize: 20, fontWeight: '900' },
-  sectionAction: { color: '#006CAF', fontSize: 13, fontWeight: '900' },
-  tabsCard: { backgroundColor: '#ffffff', borderColor: '#e1ebf2', borderRadius: 8, borderWidth: 1, gap: 12, padding: 13 },
-  menuTitleRow: { alignItems: 'center', flexDirection: 'row', gap: 10 },
-  menuTitle: { color: '#F27A1A', fontSize: 19, fontWeight: '800' },
-  tabs: { backgroundColor: '#eef4f8', borderRadius: 8, flexDirection: 'row', gap: 5, padding: 5 },
-  tabButton: { alignItems: 'center', borderRadius: 7, flex: 1, justifyContent: 'center', minHeight: 40 },
-  tabButtonActive: { backgroundColor: '#00365A', boxShadow: '0px 5px 14px rgba(0, 28, 48, 0.12)' },
-  tabText: { color: '#687784', fontSize: 11, fontWeight: '900' },
-  tabTextActive: { color: '#ffffff' },
-  courseList: { gap: 10 },
-  accordionCard: { backgroundColor: '#ffffff', borderColor: '#d6dee5', borderRadius: 8, borderWidth: 1, overflow: 'hidden' },
-  accordionHeader: { alignItems: 'center', backgroundColor: '#f8fafc', flexDirection: 'row', gap: 9, minHeight: 50, paddingHorizontal: 14 },
-  bookmark: { borderBottomLeftRadius: 2, borderBottomRightRadius: 2, height: 25, width: 17 },
-  accordionTitle: { color: '#263846', flex: 1, fontSize: 15, fontWeight: '900' },
-  chevronOpen: { transform: [{ rotate: '180deg' }] },
-  accordionBody: { backgroundColor: '#ffffff', gap: 12, padding: 16, paddingLeft: 24 },
-  infoLine: { alignItems: 'center', flexDirection: 'row', gap: 5 },
-  infoLabel: { color: '#2e3b45', fontSize: 13, fontWeight: '900' },
-  infoValue: { color: '#344856', flex: 1, fontSize: 13, letterSpacing: 0.5 },
-  actionLine: { alignItems: 'center', flexDirection: 'row', gap: 8 },
-  meetButton: { alignItems: 'center', backgroundColor: '#1D8AE5', borderRadius: 5, flexDirection: 'row', gap: 5, paddingHorizontal: 9, paddingVertical: 7 },
-  meetButtonDisabled: { backgroundColor: '#8ba0ad' },
-  meetText: { color: '#ffffff', fontSize: 12, fontWeight: '900' },
-  courseCard: {
-    backgroundColor: '#ffffff',
-    borderColor: '#e1ebf2',
-    borderRadius: 8,
-    borderWidth: 1,
-    flexDirection: 'row',
-    overflow: 'hidden',
-  },
-  courseStripe: { width: 5 },
-  courseBody: { flex: 1, padding: 15 },
-  courseTop: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  courseIcon: { alignItems: 'center', backgroundColor: '#eef7fc', borderRadius: 8, height: 44, justifyContent: 'center', width: 44 },
-  progress: { color: '#00365A', fontSize: 19, fontWeight: '900' },
-  courseTitle: { color: '#00365A', fontSize: 17, fontWeight: '900', marginTop: 12 },
-  courseTeacher: { color: '#687784', fontSize: 12, lineHeight: 18, marginTop: 4 },
-  classroomText: { color: '#006CAF', fontSize: 11, fontWeight: '900', marginTop: 7 },
-  resourceList: { gap: 10 },
-  resourceCard: { alignItems: 'center', backgroundColor: '#ffffff', borderColor: '#e1ebf2', borderRadius: 8, borderWidth: 1, flexDirection: 'row', gap: 12, padding: 13 },
-  resourceIcon: { alignItems: 'center', borderRadius: 8, height: 44, justifyContent: 'center', width: 44 },
-  resourceCopy: { flex: 1 },
-  resourceTitle: { color: '#00365A', fontSize: 15, fontWeight: '900' },
-  resourceText: { color: '#687784', fontSize: 12, lineHeight: 17, marginTop: 2 },
-  resourceAction: { alignItems: 'center', backgroundColor: '#00365A', borderRadius: 8, flexDirection: 'row', gap: 3, paddingHorizontal: 8, paddingVertical: 8 },
-  resourceActionDisabled: { backgroundColor: '#8ba0ad' },
-  resourceActionText: { color: '#ffffff', fontSize: 10, fontWeight: '900' },
-  scheduleCard: { backgroundColor: '#ffffff', borderColor: '#e1ebf2', borderRadius: 8, borderWidth: 1, padding: 8 },
-  scheduleItem: { alignItems: 'center', flexDirection: 'row', gap: 10, padding: 9 },
-  scheduleIcon: { alignItems: 'center', backgroundColor: '#d8edf8', borderRadius: 8, height: 40, justifyContent: 'center', width: 40 },
-  scheduleCopy: { flex: 1 },
-  scheduleDay: { color: '#00365A', fontSize: 14, fontWeight: '900' },
-  scheduleCourse: { color: '#687784', fontSize: 12, marginTop: 2 },
-  timePill: { alignItems: 'center', backgroundColor: '#eef7fc', borderRadius: 8, flexDirection: 'row', gap: 5, paddingHorizontal: 8, paddingVertical: 7 },
-  timeText: { color: '#006CAF', fontSize: 10, fontWeight: '900' },
-  bookletList: { gap: 10 },
-  categoryCard: { backgroundColor: '#ffffff', borderColor: '#e1ebf2', borderLeftWidth: 5, borderRadius: 8, borderWidth: 1, gap: 8, padding: 12 },
-  categoryHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingBottom: 4 },
-  categoryTitle: { color: '#00365A', flex: 1, fontSize: 17, fontWeight: '900' },
-  categoryCount: { color: '#006CAF', fontSize: 11, fontWeight: '900' },
-  bookletItem: { alignItems: 'center', backgroundColor: '#ffffff', borderColor: '#e1ebf2', borderRadius: 8, borderWidth: 1, flexDirection: 'row', gap: 12, padding: 13 },
-  bookletIcon: { alignItems: 'center', backgroundColor: '#d8edf8', borderRadius: 8, height: 44, justifyContent: 'center', width: 44 },
-  bookletCopy: { flex: 1 },
-  bookletWeek: { color: '#006CAF', fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
-  bookletTitle: { color: '#00365A', fontSize: 15, fontWeight: '900', marginTop: 2 },
-  bookletArea: { color: '#687784', fontSize: 12, marginTop: 2 },
-  downloadButton: { alignItems: 'center', backgroundColor: '#00365A', borderRadius: 8, height: 40, justifyContent: 'center', width: 40 },
-  liveCard: { alignItems: 'center', backgroundColor: '#0F7A59', borderRadius: 8, flexDirection: 'row', gap: 12, padding: 16 },
-  liveIcon: { alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 8, height: 48, justifyContent: 'center', width: 48 },
-  liveCopy: { flex: 1 },
-  liveTitle: { color: '#ffffff', fontSize: 17, fontWeight: '900' },
-  liveText: { color: '#e0f6ed', fontSize: 12, lineHeight: 18, marginTop: 3 },
-  infoText: { backgroundColor: '#eef7fc', borderColor: '#cfe7f5', borderRadius: 8, borderWidth: 1, color: '#365465', fontSize: 12, fontWeight: '800', lineHeight: 18, padding: 10 },
-  errorText: { backgroundColor: '#fff8e8', borderColor: '#f1dfb5', borderRadius: 8, borderWidth: 1, color: '#614918', fontSize: 12, fontWeight: '800', lineHeight: 18, padding: 10 },
+  screen: { paddingBottom: 0 },
+  listContent: { flexGrow: 1 },
+  metricsRow: { flexDirection: 'row', gap: 9, marginBottom: 18, marginHorizontal: 16 },
+  searchWrap: { marginHorizontal: 16 },
+  courseCard: { gap: 14, marginBottom: 12, overflow: 'hidden', paddingTop: 18 },
+  courseAccent: { height: 4, left: 0, position: 'absolute', right: 0, top: 0 },
+  courseHeader: { alignItems: 'center', flexDirection: 'row', gap: 12 },
+  courseIcon: { alignItems: 'center', borderRadius: 14, height: 48, justifyContent: 'center', width: 48 },
+  courseHeading: { flex: 1, gap: 5 },
+  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  teacherRow: { alignItems: 'center', backgroundColor: theme.colors.surfaceMuted, borderRadius: 14, flexDirection: 'row', gap: 10, padding: 10 },
+  teacherCopy: { flex: 1 },
+  courseActions: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between' },
+  teacherCourseTop: { alignItems: 'center', flexDirection: 'row', gap: 10 },
+  locationRow: { alignItems: 'flex-start', flexDirection: 'row', gap: 7 },
+  locationCopy: { flex: 1 },
+  contactSummary: { flexDirection: 'row', gap: 10 },
+  contactMini: { alignItems: 'flex-start', flex: 1, flexDirection: 'row', gap: 7 },
+  contactMiniCopy: { flex: 1 },
+  openHint: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
+  footerSpace: { height: 105 },
+  modalScrim: { backgroundColor: palette.scrim, flex: 1, justifyContent: 'flex-end' },
+  modalSheet: { backgroundColor: theme.colors.background, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '92%', minHeight: '56%', overflow: 'hidden' },
+  modalHandle: { alignSelf: 'center', backgroundColor: theme.colors.borderStrong, borderRadius: 3, height: 5, marginTop: 9, width: 46 },
+  modalTitleRow: { alignItems: 'flex-start', borderBottomColor: theme.colors.border, borderBottomWidth: 1, flexDirection: 'row', gap: 14, justifyContent: 'space-between', padding: 18 },
+  modalTitleCopy: { flex: 1, gap: 5 },
+  modalScroll: { gap: 12, paddingBottom: 40, paddingTop: 14 },
+  criterion: { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: 16, borderWidth: 1, gap: 12, marginHorizontal: 16, padding: 14 },
+  stars: { flexDirection: 'row', justifyContent: 'space-between' },
+  starButton: { alignItems: 'center', height: 42, justifyContent: 'center', width: 44 },
+  modalError: { backgroundColor: theme.colors.dangerSoft, borderRadius: 12, marginHorizontal: 16, padding: 11 },
+  locationCard: { alignItems: 'flex-start', flexDirection: 'row', gap: 10 },
+  contactCard: { alignItems: 'center', flexDirection: 'row', gap: 10, marginBottom: 0 },
+  contactAvatar: { alignItems: 'center', backgroundColor: theme.colors.accentSoft, borderRadius: 14, height: 44, justifyContent: 'center', width: 44 },
+  contactCardCopy: { flex: 1 },
+  inlineActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'flex-end', marginHorizontal: 16 },
+  studentRow: { alignItems: 'center', backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border, borderBottomWidth: 1, flexDirection: 'row', gap: 10, marginHorizontal: 16, padding: 11 },
+  studentNumber: { alignItems: 'center', backgroundColor: theme.colors.accentSoft, borderRadius: 12, height: 34, justifyContent: 'center', width: 34 },
+  studentCopy: { flex: 1 },
 });
-

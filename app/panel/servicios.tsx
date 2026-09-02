@@ -1,297 +1,195 @@
+import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import {
-  BookUser,
-  CalendarDays,
-  ClipboardCheck,
-  Clock,
+  Bell,
+  BookOpenText,
+  CalendarCheck,
+  ChevronRight,
+  CircleHelp,
+  ClipboardList,
   CreditCard,
-  FileText,
-  Headphones,
-  HelpCircle,
-  MessageSquareText,
-  Settings,
-  ShieldQuestion,
-  UserCog,
-  Youtube,
+  FileQuestion,
+  Files,
+  GraduationCap,
+  LogOut,
+  MessageCircleMore,
+  ShieldCheck,
+  UserRound,
 } from 'lucide-react-native';
-import type React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React from 'react';
+import { Alert, Linking, Pressable, StyleSheet, View } from 'react-native';
+
+import { AuthenticatedAvatar } from '@/components/ui/authenticated-avatar';
+import {
+  AppText,
+  Card,
+  PageHeader,
+  Pill,
+  Screen,
+  SectionTitle,
+} from '@/components/ui/primitives';
+import { palette, theme } from '@/constants/theme';
+import { useSession } from '@/providers/session-provider';
+import { api } from '@/services/api';
+import { periodLabel } from '@/utils/format';
+
+type MenuItem = {
+  icon: typeof UserRound;
+  title: string;
+  description: string;
+  route?: string;
+  onPress?: () => void;
+  tone?: string;
+};
 
 export default function ServicesScreen() {
-  const serviceSections = [
-    {
-      title: 'Estudiante',
-      items: [
-        { icon: <BookUser color="#00365A" size={25} />, title: 'Perfil academico', text: 'Datos del estudiante y estado de matricula.', route: '/panel/perfil' },
-        { icon: <CreditCard color="#00365A" size={25} />, title: 'Pagos', text: 'Pensiones, vouchers y estado financiero.', route: '/panel/pagos' },
-        { icon: <ClipboardCheck color="#00365A" size={25} />, title: 'Asistencia', text: 'Historial de asistencia, tardanzas y faltas.', route: '/panel/asistencia' },
-      ],
-    },
-    {
-      title: 'Docente y administracion',
-      items: [
-        { icon: <UserCog color="#00365A" size={25} />, title: 'Panel docente', text: 'Horarios, recursos, sesiones y asistencia docente.', route: '/panel/docente' },
-        { icon: <Settings color="#00365A" size={25} />, title: 'Administracion', text: 'Usuarios, roles, permisos y reportes.', route: '/panel/admin' },
-      ],
-    },
-    {
-      title: 'Soporte institucional',
-      items: [
-        { icon: <ShieldQuestion color="#00365A" size={25} />, title: 'Libro de reclamaciones', text: 'Registra consultas, reclamos y seguimiento.', route: '/panel/reclamaciones' },
-        { icon: <FileText color="#00365A" size={25} />, title: 'Documentos', text: 'Constancias, comunicados y materiales oficiales.' },
-        { icon: <MessageSquareText color="#00365A" size={25} />, title: 'Comunicados', text: 'Avisos importantes del ciclo vigente.' },
-        { icon: <HelpCircle color="#00365A" size={25} />, title: 'Mesa de ayuda', text: 'Orientacion para problemas de cuenta o plataforma.' },
-      ],
-    },
+  const { user, role, period, logout } = useSession();
+  const teacher = role === 'docente';
+  const common: MenuItem[] = [
+    { icon: UserRound, title: 'Mi perfil', description: 'Datos personales, foto y contacto.', route: '/panel/perfil', tone: theme.colors.accent },
+    { icon: CalendarCheck, title: 'Asistencia', description: teacher ? 'Sesiones y horas registradas.' : 'Asistencias, tardanzas y observaciones.', route: '/panel/asistencia', tone: theme.colors.success },
+    { icon: Files, title: 'Materiales', description: 'Cuadernillos y temarios del ciclo.', route: '/panel/materiales', tone: theme.colors.warning },
+    { icon: Bell, title: 'Notificaciones', description: 'Actividad reciente de tu cuenta.', route: '/panel/notificaciones', tone: theme.colors.info },
+  ];
+  const student: MenuItem[] = [
+    { icon: CreditCard, title: 'Pagos y vouchers', description: 'Estado financiero y comprobantes.', route: '/panel/pagos', tone: theme.colors.success },
+    { icon: GraduationCap, title: 'Test vocacional', description: 'Evaluacion y constancia de resultado.', route: '/panel/test-vocacional', tone: theme.colors.warning },
+  ];
+  const teacherItems: MenuItem[] = [
+    { icon: ClipboardList, title: 'Sesiones', description: 'Registra tu avance academico.', route: '/panel/sesiones', tone: theme.colors.success },
+    { icon: FileQuestion, title: 'Banco de preguntas', description: 'Entregas Word y revisiones.', route: '/panel/preguntas', tone: theme.colors.warning },
+    { icon: BookOpenText, title: 'Centro docente', description: 'Resumen de recursos y cargas.', route: '/panel/docente-recursos', tone: theme.colors.accent },
   ];
 
-  return (
-    <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <Text style={styles.kicker}>Servicios</Text>
-          <Text style={styles.title}>Centro de atencion</Text>
-          <Text style={styles.subtitle}>Gestiona tus recursos academicos desde un solo lugar.</Text>
-        </View>
-
-        <View style={styles.featuredCard}>
-          <View style={styles.featuredIcon}>
-            <Headphones color="#ffffff" size={26} />
-          </View>
-          <View style={styles.featuredCopy}>
-            <Text style={styles.featuredTitle}>Soporte CEPREUNA</Text>
-            <Text style={styles.featuredText}>Canales disponibles para consultas sobre acceso, matricula y cursos.</Text>
-          </View>
-        </View>
-
-        <View style={styles.seminarCard}>
-          <View style={styles.seminarTop}>
-            <View>
-              <Text style={styles.seminarLabel}>Proximo seminario</Text>
-              <Text style={styles.seminarTitle}>Estrategias para simulacros</Text>
-            </View>
-            <View style={styles.youtubeButton}>
-              <Youtube color="#ffffff" size={21} />
-            </View>
-          </View>
-          <View style={styles.seminarMeta}>
-            <Meta icon={<CalendarDays color="#006CAF" size={15} />} text="Sabado 25" />
-            <Meta icon={<Clock color="#006CAF" size={15} />} text="10:00 AM" />
-          </View>
-          <Text style={styles.seminarText}>Material PDF y grabacion disponible despues de la sesion.</Text>
-        </View>
-
-        {serviceSections.map((section) => (
-          <View key={section.title} style={styles.sectionBlock}>
-            <Text style={styles.sectionTitle}>{section.title}</Text>
-            {section.items.map((item) => (
-              <ServiceItem key={item.title} {...item} />
-            ))}
-          </View>
-        ))}
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
-
-function Meta({ icon, text }: { icon: React.ReactNode; text: string }) {
-  return (
-    <View style={styles.meta}>
-      {icon}
-      <Text style={styles.metaText}>{text}</Text>
-    </View>
-  );
-}
-
-function ServiceItem({ icon, title, text, route }: { icon: React.ReactNode; title: string; text: string; route?: string }) {
-  const content = (
-    <>
-      <View style={styles.icon}>{icon}</View>
-      <View style={styles.copy}>
-        <Text style={styles.itemTitle}>{title}</Text>
-        <Text style={styles.itemText}>{text}</Text>
-      </View>
-    </>
-  );
-
-  if (route) {
-    return (
-      <Pressable style={styles.item} onPress={() => router.push(route as never)}>
-        {content}
-      </Pressable>
-    );
+  function signOut() {
+    Alert.alert('Cerrar sesion', 'Tendras que volver a ingresar tus credenciales.', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Cerrar sesion',
+        style: 'destructive',
+        onPress: async () => {
+          await logout();
+          router.replace('/');
+        },
+      },
+    ]);
   }
 
+  const photoUrl = user ? user.foto_url || api.profile.photoUrl() : undefined;
+
   return (
-    <View style={styles.item}>
-      {content}
-    </View>
+    <Screen>
+      <PageHeader
+        eyebrow="Cuenta y servicios"
+        period={periodLabel(period)}
+        subtitle="Todo lo que necesitas fuera de tus accesos principales."
+        title="Menu"
+      />
+      <View style={styles.content}>
+        {user ? (
+          <Card onPress={() => router.push('/panel/perfil')} style={styles.profileCard}>
+            <AuthenticatedAvatar accent={palette.paper} name={user.nombre_completo} size={62} url={photoUrl} />
+            <View style={styles.profileCopy}>
+              <AppText color={palette.paper} numberOfLines={2} variant="heading">{user.nombre_completo}</AppText>
+              <AppText color="#CBE6F2" variant="caption">{teacher ? 'Docente' : 'Estudiante'} / {user.nro_documento || user.usuario}</AppText>
+              <View style={styles.profilePills}>
+                <Pill icon={ShieldCheck} label="Sesion protegida" tone="glass" />
+              </View>
+            </View>
+            <ChevronRight color={palette.paper} size={22} />
+          </Card>
+        ) : null}
+
+        <SectionTitle subtitle="Opciones disponibles para tu cuenta" title="Servicios" />
+        <View style={styles.grid}>
+          {[...common, ...(teacher ? teacherItems : student)].map((item) => (
+            <MenuCard item={item} key={item.title} />
+          ))}
+        </View>
+
+        <SectionTitle subtitle="Canales institucionales" title="Ayuda" />
+        <MenuRow
+          icon={MessageCircleMore}
+          onPress={() => router.push('/panel')}
+          subtitle="Consulta avisos y publicaciones del ciclo."
+          title="Foro CEPREUNA"
+        />
+        <MenuRow
+          icon={CircleHelp}
+          onPress={() => void Linking.openURL('https://www.cepreuna.edu.pe/')}
+          subtitle="Informacion y contacto institucional."
+          title="Portal de ayuda"
+        />
+        <MenuRow
+          danger
+          icon={LogOut}
+          onPress={signOut}
+          subtitle="Finaliza de forma segura en este dispositivo."
+          title="Cerrar sesion"
+        />
+
+        <AppText color={theme.colors.textMuted} style={styles.version} variant="micro">
+          APP CEPREUNA / VERSION {Constants.expoConfig?.version || '1.0.0'}
+        </AppText>
+      </View>
+    </Screen>
+  );
+}
+
+function MenuCard({ item }: { item: MenuItem }) {
+  const Icon = item.icon;
+  return (
+    <Pressable
+      onPress={() => item.onPress ? item.onPress() : item.route ? router.push(item.route as never) : undefined}
+      style={({ pressed }) => [styles.menuCard, pressed && styles.pressed]}>
+      <View style={[styles.menuIcon, { backgroundColor: `${item.tone || theme.colors.accent}18` }]}>
+        <Icon color={item.tone || theme.colors.accent} size={24} />
+      </View>
+      <AppText variant="label">{item.title}</AppText>
+      <AppText color={theme.colors.textMuted} numberOfLines={2} variant="caption">{item.description}</AppText>
+    </Pressable>
+  );
+}
+
+function MenuRow({
+  icon: Icon,
+  title,
+  subtitle,
+  onPress,
+  danger = false,
+}: {
+  icon: typeof CircleHelp;
+  title: string;
+  subtitle: string;
+  onPress: () => void;
+  danger?: boolean;
+}) {
+  return (
+    <Card onPress={onPress} style={styles.menuRow}>
+      <View style={[styles.rowIcon, danger && styles.rowIconDanger]}>
+        <Icon color={danger ? theme.colors.danger : theme.colors.primary} size={21} />
+      </View>
+      <View style={styles.rowCopy}>
+        <AppText color={danger ? theme.colors.danger : theme.colors.text} variant="label">{title}</AppText>
+        <AppText color={theme.colors.textMuted} variant="caption">{subtitle}</AppText>
+      </View>
+      <ChevronRight color={danger ? theme.colors.danger : theme.colors.textMuted} size={20} />
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    backgroundColor: '#f3f7fa',
-    flex: 1,
-  },
-  container: {
-    gap: 12,
-    padding: 16,
-    paddingBottom: 86,
-  },
-  header: {
-    backgroundColor: '#ffffff',
-    borderColor: '#e1ebf2',
-    borderRadius: 8,
-    borderWidth: 1,
-    padding: 18,
-  },
-  kicker: {
-    color: '#006CAF',
-    fontSize: 12,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-  },
-  title: {
-    color: '#00365A',
-    fontSize: 28,
-    fontWeight: '900',
-    letterSpacing: 0,
-    lineHeight: 32,
-    marginTop: 4,
-  },
-  subtitle: {
-    color: '#687784',
-    fontSize: 13,
-    lineHeight: 20,
-    marginTop: 6,
-  },
-  featuredCard: {
-    alignItems: 'center',
-    backgroundColor: '#00365A',
-    borderRadius: 8,
-    flexDirection: 'row',
-    gap: 13,
-    padding: 16,
-  },
-  featuredIcon: {
-    alignItems: 'center',
-    backgroundColor: '#006CAF',
-    borderRadius: 8,
-    height: 52,
-    justifyContent: 'center',
-    width: 52,
-  },
-  featuredCopy: {
-    flex: 1,
-  },
-  featuredTitle: {
-    color: '#ffffff',
-    fontSize: 17,
-    fontWeight: '900',
-  },
-  featuredText: {
-    color: '#d9ebf5',
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: 4,
-  },
-  seminarCard: {
-    backgroundColor: '#ffffff',
-    borderColor: '#e1ebf2',
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 12,
-    padding: 16,
-  },
-  seminarTop: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  seminarLabel: {
-    color: '#006CAF',
-    fontSize: 11,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-  },
-  seminarTitle: {
-    color: '#00365A',
-    fontSize: 18,
-    fontWeight: '900',
-    marginTop: 3,
-  },
-  youtubeButton: {
-    alignItems: 'center',
-    backgroundColor: '#BF211E',
-    borderRadius: 8,
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
-  },
-  seminarMeta: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  meta: {
-    alignItems: 'center',
-    backgroundColor: '#eef7fc',
-    borderRadius: 8,
-    flexDirection: 'row',
-    gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 7,
-  },
-  metaText: {
-    color: '#006CAF',
-    fontSize: 11,
-    fontWeight: '900',
-  },
-  seminarText: {
-    color: '#687784',
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  item: {
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderColor: '#e1ebf2',
-    borderRadius: 8,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 12,
-    padding: 15,
-  },
-  sectionBlock: {
-    gap: 9,
-  },
-  sectionTitle: {
-    color: '#00365A',
-    fontSize: 17,
-    fontWeight: '900',
-    marginTop: 4,
-  },
-  icon: {
-    alignItems: 'center',
-    backgroundColor: '#d8edf8',
-    borderRadius: 8,
-    height: 48,
-    justifyContent: 'center',
-    width: 48,
-  },
-  copy: {
-    flex: 1,
-  },
-  itemTitle: {
-    color: '#00365A',
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  itemText: {
-    color: '#687784',
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: 3,
-  },
+  content: { gap: 12, paddingHorizontal: 16, paddingTop: 18 },
+  profileCard: { alignItems: 'center', backgroundColor: theme.colors.primaryStrong, borderColor: theme.colors.primaryStrong, flexDirection: 'row', gap: 12, marginHorizontal: 0 },
+  profileCopy: { flex: 1, gap: 3 },
+  profilePills: { flexDirection: 'row', marginTop: 5 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  menuCard: { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radius.md, borderWidth: 1, flexBasis: '46%', flexGrow: 1, gap: 7, minHeight: 150, padding: 14 },
+  menuIcon: { alignItems: 'center', borderRadius: 15, height: 48, justifyContent: 'center', marginBottom: 3, width: 48 },
+  menuRow: { alignItems: 'center', flexDirection: 'row', gap: 11, marginBottom: 0 },
+  rowIcon: { alignItems: 'center', backgroundColor: theme.colors.accentSoft, borderRadius: 14, height: 46, justifyContent: 'center', width: 46 },
+  rowIconDanger: { backgroundColor: theme.colors.dangerSoft },
+  rowCopy: { flex: 1 },
+  pressed: { opacity: 0.78 },
+  version: { paddingBottom: 4, paddingTop: 10, textAlign: 'center' },
 });

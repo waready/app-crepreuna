@@ -1,94 +1,69 @@
-import { router, Tabs, usePathname } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { BookOpen, CalendarDays, ClipboardCheck, CreditCard, Grid2X2, MessageCircle } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { router, Tabs } from 'expo-router';
+import {
+  BookOpenText,
+  CalendarDays,
+  CreditCard,
+  Grid2X2,
+  MessageCircleMore,
+  PanelsTopLeft,
+} from 'lucide-react-native';
+import React, { useEffect } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HapticTab } from '@/components/haptic-tab';
-import { hasValidatedSession, saveLastPanelPath } from '@/services/api';
+import { AppText } from '@/components/ui/primitives';
+import { palette, theme } from '@/constants/theme';
+import { useSession } from '@/providers/session-provider';
 
 export default function PanelTabLayout() {
-  const [checkingSession, setCheckingSession] = useState(true);
   const insets = useSafeAreaInsets();
-  const pathname = usePathname();
+  const { status, role } = useSession();
 
   useEffect(() => {
-    let mounted = true;
+    if (status === 'anonymous') router.replace('/');
+  }, [status]);
 
-    async function guardPanel() {
-      try {
-        const wasValidatedByApp = await hasValidatedSession();
-        if (!wasValidatedByApp) {
-          throw new Error('Sesion no validada por la app.');
-        }
-        if (mounted) {
-          setCheckingSession(false);
-        }
-      } catch {
-        if (mounted) {
-          router.replace('/');
-        }
-      }
-    }
-
-    guardPanel();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!checkingSession) {
-      saveLastPanelPath(pathname).catch(() => undefined);
-    }
-  }, [checkingSession, pathname]);
-
-  if (checkingSession) {
+  if (status !== 'authenticated' || !role) {
     return (
       <View style={styles.guardScreen}>
-        <ActivityIndicator color="#00365A" size="large" />
-        <Text style={styles.guardText}>Abriendo tu pantalla...</Text>
+        <View style={styles.guardMark}>
+          <PanelsTopLeft color={palette.paper} size={28} />
+        </View>
+        <ActivityIndicator color={theme.colors.accent} size="large" />
+        <AppText color={theme.colors.textMuted} variant="caption">Preparando tu campus...</AppText>
       </View>
     );
   }
 
+  const teacher = role === 'docente';
+
   return (
-    <View style={styles.panelRoot}>
-      <StatusBar style="light" />
-      <SafeAreaView edges={['top']} style={styles.topStatusBar} />
-      <Tabs
+    <Tabs
+      initialRouteName="index"
       screenOptions={{
-        tabBarActiveTintColor: '#ffffff',
-        tabBarInactiveTintColor: '#9bb3c2',
-        tabBarStyle: {
-          backgroundColor: '#00365A',
-          borderTopColor: '#00365A',
-          borderTopWidth: 0,
-          height: 66 + Math.max(insets.bottom, 10),
-          paddingBottom: Math.max(insets.bottom, 10),
-          paddingTop: 8,
-        },
-        tabBarLabelStyle: {
-          fontSize: 10,
-          fontWeight: '900',
-          marginTop: 2,
-        },
-        tabBarItemStyle: {
-          minWidth: 44,
-        },
         headerShown: false,
+        sceneStyle: { backgroundColor: theme.colors.background },
+        tabBarActiveTintColor: palette.paper,
+        tabBarInactiveTintColor: '#8FB0C0',
         tabBarButton: HapticTab,
+        tabBarHideOnKeyboard: true,
+        tabBarItemStyle: styles.tabItem,
+        tabBarLabelStyle: styles.tabLabel,
+        tabBarStyle: [
+          styles.tabBar,
+          {
+            height: 67 + Math.max(insets.bottom, 8),
+            paddingBottom: Math.max(insets.bottom, 8),
+          },
+        ],
       }}>
       <Tabs.Screen
         name="index"
         options={{
           title: 'Foro',
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon focused={focused}>
-              <MessageCircle color={color} size={21} strokeWidth={focused ? 3 : 2.4} />
-            </TabIcon>
+            <TabIcon active={focused} color={color} icon={MessageCircleMore} />
           ),
         }}
       />
@@ -97,9 +72,7 @@ export default function PanelTabLayout() {
         options={{
           title: 'Cursos',
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon focused={focused}>
-              <BookOpen color={color} size={21} strokeWidth={focused ? 3 : 2.4} />
-            </TabIcon>
+            <TabIcon active={focused} color={color} icon={BookOpenText} />
           ),
         }}
       />
@@ -108,31 +81,27 @@ export default function PanelTabLayout() {
         options={{
           title: 'Horario',
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon focused={focused}>
-              <CalendarDays color={color} size={21} strokeWidth={focused ? 3 : 2.4} />
-            </TabIcon>
+            <TabIcon active={focused} color={color} icon={CalendarDays} />
           ),
         }}
       />
       <Tabs.Screen
         name="pagos"
         options={{
+          href: teacher ? null : '/panel/pagos',
           title: 'Pagos',
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon focused={focused}>
-              <CreditCard color={color} size={21} strokeWidth={focused ? 3 : 2.4} />
-            </TabIcon>
+            <TabIcon active={focused} color={color} icon={CreditCard} />
           ),
         }}
       />
       <Tabs.Screen
-        name="evaluaciones"
+        name="docente-recursos"
         options={{
-          title: 'Tests',
+          href: teacher ? '/panel/docente-recursos' : null,
+          title: 'Recursos',
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon focused={focused}>
-              <ClipboardCheck color={color} size={21} strokeWidth={focused ? 3 : 2.4} />
-            </TabIcon>
+            <TabIcon active={focused} color={color} icon={PanelsTopLeft} />
           ),
         }}
       />
@@ -141,43 +110,82 @@ export default function PanelTabLayout() {
         options={{
           title: 'Menu',
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon focused={focused}>
-              <Grid2X2 color={color} size={21} strokeWidth={focused ? 3 : 2.4} />
-            </TabIcon>
+            <TabIcon active={focused} color={color} icon={Grid2X2} />
           ),
         }}
       />
-      <Tabs.Screen name="admin" options={{ href: null }} />
+
       <Tabs.Screen name="asistencia" options={{ href: null }} />
       <Tabs.Screen name="docente" options={{ href: null }} />
       <Tabs.Screen name="docente-asistencia" options={{ href: null }} />
       <Tabs.Screen name="docente-horarios" options={{ href: null }} />
-      <Tabs.Screen name="docente-recursos" options={{ href: null }} />
+      <Tabs.Screen name="evaluaciones" options={{ href: null }} />
+      <Tabs.Screen name="materiales" options={{ href: null }} />
+      <Tabs.Screen name="notificaciones" options={{ href: null }} />
       <Tabs.Screen name="perfil" options={{ href: null }} />
-      <Tabs.Screen name="reclamaciones" options={{ href: null }} />
+      <Tabs.Screen name="preguntas" options={{ href: null }} />
+      <Tabs.Screen name="sesiones" options={{ href: null }} />
+      <Tabs.Screen name="test-vocacional" options={{ href: null }} />
       <Tabs.Screen name="ver-publicacion" options={{ href: null }} />
-      </Tabs>
+    </Tabs>
+  );
+}
+
+function TabIcon({
+  active,
+  color,
+  icon: Icon,
+}: {
+  active: boolean;
+  color: string;
+  icon: typeof MessageCircleMore;
+}) {
+  return (
+    <View style={[styles.tabIcon, active && styles.tabIconActive]}>
+      <Icon color={color} size={21} strokeWidth={active ? 2.8 : 2.2} />
     </View>
   );
 }
 
-function TabIcon({ children, focused }: { children: React.ReactNode; focused: boolean }) {
-  return <View style={[styles.iconBubble, focused && styles.iconBubbleActive]}>{children}</View>;
-}
-
 const styles = StyleSheet.create({
-  panelRoot: { flex: 1 },
-  topStatusBar: { backgroundColor: '#00365A' },
-  guardScreen: { alignItems: 'center', backgroundColor: '#f3f7fa', flex: 1, gap: 12, justifyContent: 'center' },
-  guardText: { color: '#00365A', fontSize: 13, fontWeight: '900' },
-  iconBubble: {
+  guardScreen: {
     alignItems: 'center',
-    borderRadius: 999,
+    backgroundColor: theme.colors.background,
+    flex: 1,
+    gap: 14,
+    justifyContent: 'center',
+  },
+  guardMark: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    borderRadius: 22,
+    height: 58,
+    justifyContent: 'center',
+    width: 58,
+  },
+  tabBar: {
+    backgroundColor: palette.navy950,
+    borderTopColor: '#164C68',
+    borderTopWidth: 1,
+    paddingHorizontal: 4,
+    paddingTop: 7,
+  },
+  tabItem: { minWidth: 52 },
+  tabLabel: {
+    fontFamily: theme.typography.bold,
+    fontSize: 9.5,
+    marginTop: 1,
+  },
+  tabIcon: {
+    alignItems: 'center',
+    borderRadius: 13,
     height: 32,
     justifyContent: 'center',
-    width: 38,
+    width: 42,
   },
-  iconBubbleActive: {
-    backgroundColor: '#006CAF',
+  tabIconActive: {
+    backgroundColor: palette.lake700,
+    borderColor: 'rgba(255,255,255,0.13)',
+    borderWidth: 1,
   },
 });

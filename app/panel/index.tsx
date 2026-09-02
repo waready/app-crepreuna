@@ -1,335 +1,389 @@
+import * as DocumentPicker from 'expo-document-picker';
 import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
-import { Heart, ImagePlus, LogOut, MessageCircle, Send, Share2, UserRound } from 'lucide-react-native';
-import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  Bell,
+  FilePlus2,
+  ImagePlus,
+  MessageCircleMore,
+  Send,
+  Sparkles,
+  X,
+} from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  View,
+} from 'react-native';
 
-import { ListSkeleton } from '@/components/ui/skeleton';
-import { useApiResource } from '@/hooks/use-api-resource';
+import { PublicationCard } from '@/components/social/publication-card';
+import {
+  AppText,
+  Button,
+  Card,
+  EmptyState,
+  ErrorState,
+  Field,
+  IconButton,
+  PageHeader,
+  Screen,
+} from '@/components/ui/primitives';
+import { palette, theme } from '@/constants/theme';
+import { useSession } from '@/providers/session-provider';
 import { api } from '@/services/api';
-import { normalizeRepoPosts } from '@/services/cepreuna-mappers';
+import type { DashboardData, PaginationMeta, Publication, UploadFile } from '@/services/api-types';
+import { periodLabel } from '@/utils/format';
 
-type ForumPost = ReturnType<typeof normalizeRepoPosts>[number];
+type FeedType = '1' | '2';
 
-const fallbackPosts = [
-  {
-    id: '1',
-    name: 'Coordinacion Academica',
-    role: 'CEPREUNA',
-    time: 'Hace 12 min',
-    text: 'Estudiantes, los cuadernillos de la semana 03 ya se encuentran disponibles en la plataforma.',
-    likes: 48,
-    comments: 12,
-    accent: '#006CAF',
-  },
-  {
-    id: '2',
-    name: 'Ana Luque',
-    role: 'Estudiante',
-    time: 'Hace 34 min',
-    text: 'Alguien tiene el enlace de la clase de Biologia? No me aparece en el horario.',
-    likes: 16,
-    comments: 7,
-    accent: '#0F7A59',
-  },
-  {
-    id: '3',
-    name: 'Prof. Miguel Ramos',
-    role: 'Docente',
-    time: 'Hace 1 h',
-    text: 'Hoy subire una practica adicional de razonamiento matematico. Revisen el modulo de cursos.',
-    likes: 31,
-    comments: 5,
-    accent: '#BF211E',
-  },
-];
-
-export default function ForumScreen() {
-  const [draft, setDraft] = useState('');
-  const [publishing, setPublishing] = useState(false);
-  const [posts, setPosts] = useState<ForumPost[]>([]);
-  const [page, setPage] = useState(1);
-  const [hasNextPage, setHasNextPage] = useState(true);
+export default function FeedScreen() {
+  const { user, period } = useSession();
+  const [feedType, setFeedType] = useState<FeedType>('1');
+  const [publications, setPublications] = useState<Publication[]>([]);
+  const [meta, setMeta] = useState<PaginationMeta>();
+  const [dashboard, setDashboard] = useState<DashboardData>();
+  const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const loadPosts = useCallback(() => api.getPublicaciones(1, 1), []);
-  const { data, loading, error, refresh } = useApiResource(loadPosts);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState('');
+  const [text, setText] = useState('');
+  const [image, setImage] = useState<UploadFile>();
+  const [file, setFile] = useState<UploadFile>();
+  const [publishing, setPublishing] = useState(false);
 
   useEffect(() => {
-    if (!data) {
-      return;
+    void loadInitial();
+    // The selected feed type defines the initial page request.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feedType]);
+
+  async function loadInitial() {
+    setLoading(true);
+    setError('');
+    try {
+      const [feed, summary] = await Promise.all([
+        api.social.publications(1, feedType),
+        api.dashboard(),
+      ]);
+      setPublications(feed.data);
+      setMeta(feed.meta);
+      setDashboard(summary);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'No se pudo cargar el foro.');
+    } finally {
+      setLoading(false);
     }
-    const nextPosts = normalizeRepoPosts(data);
-    const pagination = getPublicationPagination(data);
-    setPosts(nextPosts);
-    setPage(pagination.currentPage);
-    setHasNextPage(pagination.hasNextPage);
-  }, [data]);
+  }
 
-  const visiblePosts = posts.length ? posts : (!loading ? fallbackPosts : []);
-  const canLoadMore = posts.length > 0 && hasNextPage && !loading && !loadingMore;
-
-  const refreshFeed = useCallback(async () => {
-    setPage(1);
-    setHasNextPage(true);
-    await refresh();
-  }, [refresh]);
-
-  const loadMorePosts = useCallback(async () => {
-    if (!canLoadMore) {
-      return;
+  async function refresh() {
+    setRefreshing(true);
+    try {
+      const [feed, summary] = await Promise.all([
+        api.social.publications(1, feedType),
+        api.dashboard(),
+      ]);
+      setPublications(feed.data);
+      setMeta(feed.meta);
+      setDashboard(summary);
+      setError('');
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'No se pudo actualizar el foro.');
+    } finally {
+      setRefreshing(false);
     }
+  }
+
+  async function loadMore() {
+    if (loadingMore || !meta || meta.current_page >= meta.last_page) return;
     setLoadingMore(true);
     try {
-      const nextPage = page + 1;
-      const response = await api.getPublicaciones(nextPage, 1);
-      const nextPosts = normalizeRepoPosts(response);
-      const pagination = getPublicationPagination(response);
-      setPosts((current) => mergePosts(current, nextPosts));
-      setPage(pagination.currentPage || nextPage);
-      setHasNextPage(pagination.hasNextPage);
-    } catch (error) {
-      if (!(error instanceof Error && error.message === 'SESSION_EXPIRED_REDIRECT')) {
-        console.warn(error);
-      }
+      const next = await api.social.publications(meta.current_page + 1, feedType);
+      setPublications((current) => [...current, ...next.data.filter(
+        (incoming) => !current.some((item) => item.id === incoming.id)
+      )]);
+      setMeta(next.meta);
     } finally {
       setLoadingMore(false);
     }
-  }, [canLoadMore, page]);
+  }
 
-  const handleLogout = async () => {
-    try {
-      await api.logout();
-    } finally {
-      router.replace('/');
+  async function pickImage() {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permiso requerido', 'Permite el acceso a tus fotos para adjuntar una imagen.');
+      return;
     }
-  };
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: true,
+      mediaTypes: ['images'],
+      quality: 0.82,
+    });
+    if (!result.canceled) {
+      const asset = result.assets[0];
+      setImage({
+        uri: asset.uri,
+        name: asset.fileName || `publicacion-${Date.now()}.jpg`,
+        mimeType: asset.mimeType || 'image/jpeg',
+        size: asset.fileSize,
+      });
+      setFile(undefined);
+    }
+  }
 
-  const handlePublish = async () => {
-    if (!draft.trim() || publishing) {
+  async function pickFile() {
+    const result = await DocumentPicker.getDocumentAsync({
+      copyToCacheDirectory: true,
+      multiple: false,
+      type: [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'application/zip',
+      ],
+    });
+    if (!result.canceled) {
+      const asset = result.assets[0];
+      setFile({ uri: asset.uri, name: asset.name, mimeType: asset.mimeType, size: asset.size });
+      setImage(undefined);
+    }
+  }
+
+  async function publish() {
+    const clean = text.trim();
+    if (!clean) {
+      Alert.alert('Escribe un mensaje', 'La publicacion necesita texto antes de enviarse.');
       return;
     }
     setPublishing(true);
     try {
-      await api.crearPublicacion({ usuario: 'Estudiante CEPREUNA', texto: draft.trim(), tipo: 1 });
-      setDraft('');
-      await refreshFeed();
-    } catch (error) {
-      if (!(error instanceof Error && error.message === 'SESSION_EXPIRED_REDIRECT')) {
-        console.warn(error);
-      }
+      await api.social.createPublication({ texto: clean, tipo: feedType, imagen: image, archivo: file });
+      setText('');
+      setImage(undefined);
+      setFile(undefined);
+      await refresh();
+    } catch (caught) {
+      Alert.alert('No se pudo publicar', caught instanceof Error ? caught.message : 'Intenta nuevamente.');
     } finally {
       setPublishing(false);
     }
-  };
+  }
 
-  const renderHeader = () => (
-    <>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.kicker}>Foro institucional</Text>
-          <Text style={styles.title}>Publicaciones</Text>
-        </View>
-        <Pressable style={styles.logoutButton} onPress={handleLogout}>
-          <LogOut color="#ffffff" size={19} />
-        </Pressable>
-      </View>
+  async function toggleLike(publication: Publication) {
+    const result = publication.liked
+      ? await api.social.unlike(publication.id)
+      : await api.social.like(publication.id);
+    setPublications((current) => current.map((item) => item.id === publication.id
+      ? { ...item, liked: result.liked, like: result.likes }
+      : item));
+  }
 
-      <View style={styles.composer}>
-        <View style={styles.composerTop}>
-          <View style={styles.avatar}>
-            <Image source={require('@/assets/images/cepreuna-logo.png')} style={styles.avatarLogo} contentFit="contain" />
-          </View>
-          <View style={styles.composerInputWrap}>
-            <Text style={styles.composerName}>Estudiante CEPREUNA</Text>
-            <TextInput
-              multiline
-              placeholder="Que estas pensando?"
-              placeholderTextColor="#8a99a6"
-              style={styles.composerInput}
-              value={draft}
-              onChangeText={setDraft}
-            />
-          </View>
-        </View>
-        <View style={styles.composerActions}>
-          <View style={styles.attachButton}>
-            <ImagePlus color="#006CAF" size={19} />
-            <Text style={styles.attachText}>Adjuntar</Text>
-          </View>
-          <Pressable style={[styles.postButton, publishing && styles.postButtonDisabled]} onPress={handlePublish} disabled={publishing}>
-            <Send color="#ffffff" size={18} />
-            <Text style={styles.postButtonText}>{publishing ? 'Publicando...' : 'Publicar'}</Text>
-          </Pressable>
-        </View>
-      </View>
-
-      <View style={styles.feedHeader}>
-        <Text style={styles.sectionTitle}>Actividad reciente</Text>
-        <Pressable onPress={refreshFeed}>
-          <Text style={styles.sectionAction}>{loading ? 'Cargando...' : 'Actualizar'}</Text>
-        </Pressable>
-      </View>
-      {error ? <Text style={styles.errorText}>Modo demo: {error}</Text> : null}
-      {loading && !posts.length ? <ListSkeleton count={3} /> : null}
-    </>
-  );
-
-  const renderFooter = () => {
-    if (loadingMore) {
-      return <ListSkeleton count={2} />;
+  async function deletePublication(id: number) {
+    try {
+      await api.social.deletePublication(id);
+      setPublications((current) => current.filter((item) => item.id !== id));
+    } catch (caught) {
+      Alert.alert('No se pudo eliminar', caught instanceof Error ? caught.message : 'Intenta nuevamente.');
     }
-    if (posts.length && !hasNextPage) {
-      return <Text style={styles.endText}>Ya llegaste al inicio del historial.</Text>;
-    }
-    return null;
-  };
+  }
 
-  const renderPost = ({ item: post }: { item: ForumPost }) => (
-    <Pressable style={styles.postCard} onPress={() => router.push('/panel/ver-publicacion')}>
-      <View style={[styles.postAccent, { backgroundColor: post.accent }]} />
-      <View style={styles.postBody}>
-        <View style={styles.postHeader}>
-          <View style={[styles.userAvatar, { backgroundColor: `${post.accent}22` }]}>
-            {post.avatar ? <Image source={{ uri: post.avatar }} style={styles.avatarPhoto} contentFit="cover" /> : <UserRound color={post.accent} size={22} />}
-          </View>
-          <View style={styles.userInfo}>
-            <Text style={styles.userName}>{post.name}</Text>
-            <Text style={styles.userMeta}>{post.role} ? {post.time}</Text>
-          </View>
-        </View>
-        <Text style={styles.postText}>{post.text}</Text>
-        {post.image ? <Image source={{ uri: post.image }} style={styles.postImage} contentFit="cover" /> : null}
-        <View style={styles.postActions}>
-          <SocialAction icon={<Heart color="#BF211E" size={17} />} text={`${post.likes}`} />
-          <SocialAction icon={<MessageCircle color="#006CAF" size={17} />} text={`${post.comments}`} />
-          <SocialAction icon={<Share2 color="#687784" size={17} />} text="Compartir" />
-        </View>
-      </View>
-    </Pressable>
-  );
+  const firstName = user?.nombres?.split(' ')[0] || user?.nombre_completo?.split(' ')[0] || 'CEPREUNA';
 
   return (
-    <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
+    <Screen contentStyle={styles.screen} scroll={false}>
       <FlatList
-        contentContainerStyle={styles.container}
-        data={visiblePosts}
-        keyExtractor={(item) => item.id}
-        ListFooterComponent={renderFooter}
-        ListHeaderComponent={renderHeader}
-        onEndReached={loadMorePosts}
-        onEndReachedThreshold={0.45}
-        renderItem={renderPost}
+        ListEmptyComponent={!loading && !error ? (
+          <EmptyState
+            icon={MessageCircleMore}
+            message={feedType === '1'
+              ? 'Se el primero en compartir algo con tu comunidad del ciclo.'
+              : 'Los comunicados oficiales del ciclo apareceran aqui.'}
+            title={feedType === '1' ? 'Aun no hay publicaciones' : 'Sin comunicados'}
+          />
+        ) : null}
+        ListFooterComponent={loadingMore ? (
+          <ActivityIndicator color={theme.colors.accent} style={styles.footerLoader} />
+        ) : <View style={styles.footerSpace} />}
+        ListHeaderComponent={(
+          <View>
+            <PageHeader
+              action={(
+                <IconButton
+                  accessibilityLabel="Abrir notificaciones"
+                  badge={dashboard?.resumen.notificaciones_sin_leer}
+                  icon={Bell}
+                  onPress={() => router.push('/panel/notificaciones')}
+                  tone="light"
+                />
+              )}
+              eyebrow={user?.rol === 'docente' ? 'Campus docente' : 'Campus estudiante'}
+              period={periodLabel(period)}
+              subtitle="Comparte, consulta y mantente al dia con tu comunidad."
+              title={`Hola, ${firstName}`}
+            />
+
+            <View style={styles.segmentWrap}>
+              <FeedSegment active={feedType === '1'} label="Foro" onPress={() => setFeedType('1')} />
+              <FeedSegment active={feedType === '2'} label="Comunicados" onPress={() => setFeedType('2')} />
+            </View>
+
+            <Composer
+              file={file}
+              image={image}
+              onClearAttachment={() => {
+                setImage(undefined);
+                setFile(undefined);
+              }}
+              onPickFile={pickFile}
+              onPickImage={pickImage}
+              onPublish={publish}
+              publishing={publishing}
+              setText={setText}
+              text={text}
+              userName={user?.nombre_completo || 'Usuario CEPREUNA'}
+            />
+
+            {loading ? (
+              <View style={styles.loadingBlock}>
+                <ActivityIndicator color={theme.colors.accent} size="large" />
+                <AppText color={theme.colors.textMuted} variant="caption">Cargando publicaciones del ciclo...</AppText>
+              </View>
+            ) : null}
+            {error ? <ErrorState message={error} onRetry={loadInitial} /> : null}
+          </View>
+        )}
+        contentContainerStyle={styles.listContent}
+        data={loading || error ? [] : publications}
+        keyExtractor={(item) => String(item.id)}
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.35}
+        onRefresh={refresh}
+        refreshing={refreshing}
+        renderItem={({ item }) => (
+          <PublicationCard
+            onDelete={item.propia ? () => deletePublication(item.id) : undefined}
+            onOpen={() => router.push({ pathname: '/panel/ver-publicacion', params: { id: String(item.id) } })}
+            onToggleLike={() => toggleLike(item)}
+            publication={item}
+          />
+        )}
         showsVerticalScrollIndicator={false}
       />
-    </SafeAreaView>
+    </Screen>
   );
 }
 
-function getPublicationPagination(data: unknown) {
-  const record = data && typeof data === 'object' ? (data as Record<string, unknown>) : {};
-  const currentPage = typeof record.current_page === 'number' ? record.current_page : 1;
-  const lastPage = typeof record.last_page === 'number' ? record.last_page : currentPage;
-  const hasNextPage = Boolean(record.next_page_url) || currentPage < lastPage;
-  return { currentPage, hasNextPage };
-}
-
-function mergePosts(current: ForumPost[], next: ForumPost[]) {
-  const seen = new Set(current.map((post) => post.id));
-  const merged = [...current];
-  next.forEach((post) => {
-    if (!seen.has(post.id)) {
-      seen.add(post.id);
-      merged.push(post);
-    }
-  });
-  return merged;
-}
-
-function SocialAction({ icon, text }: { icon: React.ReactNode; text: string }) {
+function FeedSegment({ active, label, onPress }: { active: boolean; label: string; onPress: () => void }) {
   return (
-    <View style={styles.socialAction}>
-      {icon}
-      <Text style={styles.socialText}>{text}</Text>
-    </View>
+    <Pressable
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active }}
+      onPress={onPress}
+      style={({ pressed }) => [styles.segment, active && styles.segmentActive, pressed && styles.pressed]}>
+      <AppText color={active ? palette.paper : theme.colors.textSoft} variant="label">{label}</AppText>
+    </Pressable>
+  );
+}
+
+function Composer({
+  text,
+  setText,
+  image,
+  file,
+  publishing,
+  userName,
+  onPickImage,
+  onPickFile,
+  onClearAttachment,
+  onPublish,
+}: {
+  text: string;
+  setText: (value: string) => void;
+  image?: UploadFile;
+  file?: UploadFile;
+  publishing: boolean;
+  userName: string;
+  onPickImage: () => void;
+  onPickFile: () => void;
+  onClearAttachment: () => void;
+  onPublish: () => void;
+}) {
+  return (
+    <Card style={styles.composer}>
+      <View style={styles.composerTitleRow}>
+        <View style={styles.composerSpark}>
+          <Sparkles color={theme.colors.accent} size={19} />
+        </View>
+        <View style={styles.composerCopy}>
+          <AppText variant="label">Comparte con tu ciclo</AppText>
+          <AppText color={theme.colors.textMuted} variant="micro">Publicaras como {userName}</AppText>
+        </View>
+      </View>
+      <Field
+        maxLength={10000}
+        multiline
+        onChangeText={setText}
+        placeholder="Escribe una consulta, aviso o aporte..."
+        value={text}
+      />
+      {image ? (
+        <View style={styles.attachmentPreview}>
+          <Image contentFit="cover" source={{ uri: image.uri }} style={styles.attachmentImage} />
+          <Pressable onPress={onClearAttachment} style={styles.clearAttachment}>
+            <X color={palette.paper} size={16} />
+          </Pressable>
+        </View>
+      ) : null}
+      {file ? (
+        <View style={styles.filePreview}>
+          <FilePlus2 color={theme.colors.primary} size={20} />
+          <AppText numberOfLines={1} style={styles.fileName} variant="caption">{file.name}</AppText>
+          <IconButton accessibilityLabel="Quitar archivo" icon={X} onPress={onClearAttachment} tone="danger" />
+        </View>
+      ) : null}
+      <View style={styles.composerActions}>
+        <View style={styles.attachmentActions}>
+          <IconButton accessibilityLabel="Adjuntar imagen" icon={ImagePlus} onPress={onPickImage} />
+          <IconButton accessibilityLabel="Adjuntar documento" icon={FilePlus2} onPress={onPickFile} />
+        </View>
+        <Button
+          compact
+          disabled={!text.trim() || publishing}
+          icon={Send}
+          label={publishing ? 'Publicando' : 'Publicar'}
+          loading={publishing}
+          onPress={onPublish}
+        />
+      </View>
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { backgroundColor: '#f3f7fa', flex: 1 },
-  container: { gap: 14, padding: 16, paddingBottom: 86 },
-  header: {
-    alignItems: 'center',
-    backgroundColor: '#00365A',
-    borderRadius: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: 18,
-  },
-  kicker: { color: '#BFE8FF', fontSize: 12, fontWeight: '900', textTransform: 'uppercase' },
-  title: { color: '#ffffff', fontSize: 30, fontWeight: '900', letterSpacing: 0, marginTop: 3 },
-  logoutButton: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.16)',
-    borderColor: 'rgba(255,255,255,0.28)',
-    borderRadius: 8,
-    borderWidth: 1,
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
-  },
-  composer: {
-    backgroundColor: '#ffffff',
-    borderColor: '#e1ebf2',
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 12,
-    padding: 14,
-  },
-  composerTop: { flexDirection: 'row', gap: 12 },
-  avatar: { alignItems: 'center', backgroundColor: '#eef7fc', borderRadius: 8, height: 48, justifyContent: 'center', width: 48 },
-  avatarLogo: { height: 32, width: 40 },
-  composerInputWrap: { flex: 1 },
-  composerName: { color: '#00365A', fontSize: 14, fontWeight: '900' },
-  composerInput: {
-    color: '#1f2d38',
-    fontSize: 14,
-    lineHeight: 20,
-    minHeight: 72,
-    paddingTop: 8,
-    textAlignVertical: 'top',
-  },
+  screen: { paddingBottom: 0 },
+  listContent: { flexGrow: 1 },
+  segmentWrap: { alignSelf: 'center', backgroundColor: '#E5EDF0', borderRadius: 15, flexDirection: 'row', gap: 4, marginBottom: 16, padding: 4, width: '70%' },
+  segment: { alignItems: 'center', borderRadius: 11, flex: 1, justifyContent: 'center', minHeight: 40, paddingHorizontal: 12 },
+  segmentActive: { backgroundColor: theme.colors.primary },
+  composer: { gap: 14, marginBottom: 20 },
+  composerTitleRow: { alignItems: 'center', flexDirection: 'row', gap: 10 },
+  composerSpark: { alignItems: 'center', backgroundColor: theme.colors.accentSoft, borderRadius: 12, height: 40, justifyContent: 'center', width: 40 },
+  composerCopy: { flex: 1 },
   composerActions: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  attachButton: { alignItems: 'center', flexDirection: 'row', gap: 6, paddingHorizontal: 4, paddingVertical: 8 },
-  attachText: { color: '#006CAF', fontSize: 13, fontWeight: '900' },
-  postButton: { alignItems: 'center', backgroundColor: '#00365A', borderRadius: 8, flexDirection: 'row', gap: 7, paddingHorizontal: 14, paddingVertical: 11 },
-  postButtonDisabled: { opacity: 0.7 },
-  postButtonText: { color: '#ffffff', fontSize: 13, fontWeight: '900' },
-  feedHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  sectionTitle: { color: '#00365A', fontSize: 20, fontWeight: '900' },
-  sectionAction: { color: '#006CAF', fontSize: 13, fontWeight: '900' },
-  postCard: {
-    backgroundColor: '#ffffff',
-    borderColor: '#e1ebf2',
-    borderRadius: 8,
-    borderWidth: 1,
-    flexDirection: 'row',
-    overflow: 'hidden',
-  },
-  postAccent: { width: 5 },
-  postBody: { flex: 1, gap: 12, padding: 14 },
-  postHeader: { alignItems: 'center', flexDirection: 'row', gap: 10 },
-  userAvatar: { alignItems: 'center', borderRadius: 8, height: 44, justifyContent: 'center', width: 44 },
-  avatarPhoto: { borderRadius: 8, height: 44, width: 44 },
-  userInfo: { flex: 1 },
-  userName: { color: '#00365A', fontSize: 15, fontWeight: '900' },
-  userMeta: { color: '#687784', fontSize: 12, marginTop: 2 },
-  postText: { color: '#1f2d38', fontSize: 14, lineHeight: 21 },
-  postImage: { borderRadius: 8, height: 180, width: '100%' },
-  postActions: { borderTopColor: '#eef2f5', borderTopWidth: 1, flexDirection: 'row', gap: 14, paddingTop: 10 },
-  socialAction: { alignItems: 'center', flexDirection: 'row', gap: 5 },
-  socialText: { color: '#687784', fontSize: 12, fontWeight: '800' },
-  errorText: { backgroundColor: '#fff8e8', borderColor: '#f1dfb5', borderRadius: 8, borderWidth: 1, color: '#614918', fontSize: 12, fontWeight: '800', lineHeight: 18, padding: 10 },
-  endText: { color: '#687784', fontSize: 12, fontWeight: '800', paddingVertical: 12, textAlign: 'center' },
+  attachmentActions: { flexDirection: 'row', gap: 8 },
+  attachmentPreview: { borderRadius: 16, overflow: 'hidden', position: 'relative' },
+  attachmentImage: { aspectRatio: 1.9, width: '100%' },
+  clearAttachment: { alignItems: 'center', backgroundColor: palette.scrim, borderRadius: 16, height: 32, justifyContent: 'center', position: 'absolute', right: 9, top: 9, width: 32 },
+  filePreview: { alignItems: 'center', backgroundColor: theme.colors.surfaceMuted, borderRadius: 14, flexDirection: 'row', gap: 10, padding: 9 },
+  fileName: { flex: 1 },
+  loadingBlock: { alignItems: 'center', gap: 10, padding: 42 },
+  footerLoader: { marginVertical: 24 },
+  footerSpace: { height: 100 },
+  pressed: { opacity: 0.72 },
 });
-

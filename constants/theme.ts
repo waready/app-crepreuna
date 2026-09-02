@@ -1,53 +1,133 @@
-/**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
- */
-
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+export const palette = {
+  navy950: '#05253A',
+  navy900: '#073957',
+  navy800: '#0A496D',
+  lake700: '#006FA6',
+  lake600: '#078BC4',
+  lake100: '#DDF3FB',
+  lake50: '#EFF9FD',
+  ink900: '#172633',
+  ink700: '#405361',
+  ink500: '#6C7E89',
+  paper: '#FFFFFF',
+  canvas: '#F3F7F8',
+  line: '#DCE7EB',
+  lineStrong: '#C7D7DD',
+  gold600: '#B76A16',
+  gold100: '#FBEBD4',
+  green700: '#0B7555',
+  green100: '#DDF4EA',
+  red700: '#B83232',
+  red100: '#FBE5E2',
+  violet700: '#6255A5',
+  violet100: '#ECE9FA',
+  scrim: 'rgba(5, 37, 58, 0.58)',
+} as const;
 
-export const Colors = {
-  light: {
-    text: '#11181C',
-    background: '#fff',
-    tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
-    tabIconSelected: tintColorLight,
+export const theme = {
+  colors: {
+    primary: palette.navy900,
+    primaryStrong: palette.navy950,
+    accent: palette.lake600,
+    accentSoft: palette.lake100,
+    background: palette.canvas,
+    surface: palette.paper,
+    surfaceMuted: palette.lake50,
+    text: palette.ink900,
+    textMuted: palette.ink500,
+    textSoft: palette.ink700,
+    border: palette.line,
+    borderStrong: palette.lineStrong,
+    success: palette.green700,
+    successSoft: palette.green100,
+    warning: palette.gold600,
+    warningSoft: palette.gold100,
+    danger: palette.red700,
+    dangerSoft: palette.red100,
+    info: palette.violet700,
+    infoSoft: palette.violet100,
   },
-  dark: {
-    text: '#ECEDEE',
-    background: '#151718',
-    tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
-    tabIconSelected: tintColorDark,
+  spacing: {
+    xxs: 4,
+    xs: 8,
+    sm: 12,
+    md: 16,
+    lg: 20,
+    xl: 24,
+    xxl: 32,
+    jumbo: 40,
+  },
+  radius: {
+    sm: 10,
+    md: 16,
+    lg: 22,
+    xl: 30,
+    pill: 999,
+  },
+  typography: {
+    regular: 'Manrope_400Regular',
+    medium: 'Manrope_500Medium',
+    semibold: 'Manrope_600SemiBold',
+    bold: 'Manrope_700Bold',
+    extraBold: 'Manrope_800ExtraBold',
+    display: 'Fraunces_700Bold',
+  },
+  shadow: Platform.select({
+    ios: {
+      shadowColor: palette.navy950,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.08,
+      shadowRadius: 18,
+    },
+    android: { elevation: 3 },
+    default: {
+      boxShadow: '0 10px 30px rgba(5, 37, 58, 0.08)',
+    },
+  }),
+} as const;
+
+export const navigationTheme = {
+  dark: false,
+  colors: {
+    primary: theme.colors.accent,
+    background: theme.colors.background,
+    card: theme.colors.surface,
+    text: theme.colors.text,
+    border: theme.colors.border,
+    notification: theme.colors.danger,
+  },
+  fonts: {
+    regular: { fontFamily: theme.typography.regular, fontWeight: '400' as const },
+    medium: { fontFamily: theme.typography.semibold, fontWeight: '600' as const },
+    bold: { fontFamily: theme.typography.bold, fontWeight: '700' as const },
+    heavy: { fontFamily: theme.typography.extraBold, fontWeight: '800' as const },
   },
 };
 
-export const Fonts = Platform.select({
-  ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
-    sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
-    serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
-    rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
-    mono: 'ui-monospace',
+export const Colors = {
+  light: {
+    text: theme.colors.text,
+    background: theme.colors.background,
+    tint: theme.colors.accent,
+    icon: theme.colors.textMuted,
+    tabIconDefault: '#93AAB6',
+    tabIconSelected: theme.colors.surface,
   },
-  default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
+  dark: {
+    text: theme.colors.text,
+    background: theme.colors.background,
+    tint: theme.colors.accent,
+    icon: theme.colors.textMuted,
+    tabIconDefault: '#93AAB6',
+    tabIconSelected: theme.colors.surface,
   },
-  web: {
-    sans: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-    serif: "Georgia, 'Times New Roman', serif",
-    rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
-    mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-  },
-});
+};
+
+export const Fonts = {
+  sans: theme.typography.regular,
+  serif: theme.typography.display,
+  rounded: theme.typography.semibold,
+  mono: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+};

@@ -1,50 +1,42 @@
-# Welcome to your Expo app 👋
+# App CEPREUNA
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Aplicacion movil institucional para estudiantes y docentes de CEPREUNA. Esta construida con Expo SDK 54, React Native y Expo Router, y consume exclusivamente la API Laravel multiciclo.
 
-## Get started
+## Alcance
 
-1. Install dependencies
+- Acceso separado para estudiantes y docentes.
+- Cursos, horarios, asistencia, materiales y perfil del ciclo activo.
+- Pagos, test vocacional y certificados para estudiantes.
+- Sesiones, recursos y entrega de preguntas Word para docentes.
+- Publicaciones, comentarios y notificaciones institucionales.
+- El cliente nunca selecciona ni envia `id_periodo`; el backend resuelve el ciclo activo.
 
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Desarrollo
 
 ```bash
-npm run reset-project
+npm ci
+npm start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+La URL predeterminada es `https://sistemas.cepreuna.edu.pe/api/app/v1`. Para usar otro ambiente, crea un `.env.local` a partir de `.env.example`.
 
-## Learn more
+Validaciones locales:
 
-To learn more about developing your project with Expo, look at the following resources:
+```bash
+npm run lint
+npm run typecheck
+npm run export:web
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Compilacion
 
-## Join the community
+El perfil `preview` genera un APK instalable y `production` genera los artefactos para las tiendas:
 
-Join our community of developers creating universal apps.
+```bash
+npx eas-cli login
+npx eas-cli init
+npx eas-cli build --platform android --profile preview
+npx eas-cli build --platform all --profile production
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+GitHub Actions valida cada cambio. Al conectar este repositorio desde la configuracion de GitHub del proyecto en Expo, un push a `master` ejecuta `.eas/workflows/build.yml` y genera el APK de prueba automaticamente.

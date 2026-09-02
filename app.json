@@ -9,6 +9,7 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
+      "bundleIdentifier": "pe.edu.cepreuna.app",
       "supportsTablet": true
     },
     "android": {
@@ -23,9 +24,7 @@
       "edgeToEdgeEnabled": false,
       "predictiveBackGestureEnabled": false,
       "softwareKeyboardLayoutMode": "resize",
-      "permissions": [
-        "CAMERA"
-      ]
+      "permissions": []
     },
     "web": {
       "output": "static",
@@ -45,12 +44,8 @@
           }
         }
       ],
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "Permitir que App CEPREUNA use la camara para escanear vouchers de pago."
-        }
-      ]
+      "expo-secure-store",
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true,
