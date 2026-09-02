@@ -50,6 +50,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "8a00e95b-153f-4277-9705-eb3672946fcf"
+      }
+    },
+    "owner": "waready"
   }
 }
